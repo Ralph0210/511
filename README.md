@@ -3,6 +3,8 @@ billboard.py
 
 **billboard.py** is a Python API for accessing music charts from [Billboard.com](http://www.billboard.com/charts/).
 
+**Original author:** The `billboard.py` library was originally created by **Allen Guo** ([guoguo12](https://github.com/guoguo12)). This project extends it with a web app and Supabase-backed analytics.
+
 Installation
 ------------
 
