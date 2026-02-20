@@ -1,4 +1,5 @@
 import ChartAvgLifespanOverTime from "@/components/ChartAvgLifespanOverTime";
+import ChartLongevityStreamingEra from "@/components/ChartLongevityStreamingEra";
 import ChartPeakVsLongevity from "@/components/ChartPeakVsLongevity";
 import Q2MethodologySection from "@/components/Q2MethodologySection";
 import { createSupabaseClient } from "@/lib/supabase";
@@ -7,7 +8,7 @@ export const dynamic = "force-dynamic";
 
 type LifespanByYear = { debut_year: number; avg_lifespan: number; song_count: number };
 type DebutStats = { is_debut: boolean; avg_weeks: number; median_weeks: number; q1_weeks: number; q3_weeks: number; min_weeks: number; max_weeks: number; song_count: number };
-type PeakLongevity = { peak_rank: number; weeks_on_board: number };
+type PeakLongevity = { peak_rank: number; weeks_on_board: number; song?: string; artist?: string };
 
 function percentile(arr: number[], p: number): number {
   const sorted = [...arr].sort((a, b) => a - b);
@@ -151,12 +152,12 @@ async function getAnalyticsFromChartEntries(supabase: ReturnType<typeof createSu
 
   if (!rows.length) return null;
 
-  const bySong: Record<string, { firstDate: string; firstIsNew: boolean; maxWeeks: number; peakRank: number }> = {};
+  const bySong: Record<string, { firstDate: string; firstIsNew: boolean; maxWeeks: number; peakRank: number; song: string; artist: string }> = {};
   for (const r of rows) {
     const key = `${r.song}\x1f${r.artist}`;
     const isNew = r.is_new === true || r.is_new === "True" || r.is_new === "true";
     if (!bySong[key]) {
-      bySong[key] = { firstDate: r.date, firstIsNew: isNew, maxWeeks: r.weeks_on_board, peakRank: r.peak_rank };
+      bySong[key] = { firstDate: r.date, firstIsNew: isNew, maxWeeks: r.weeks_on_board, peakRank: r.peak_rank, song: r.song, artist: r.artist };
     } else {
       const s = bySong[key];
       if (r.date < s.firstDate) {
@@ -217,7 +218,7 @@ async function getAnalyticsFromChartEntries(supabase: ReturnType<typeof createSu
   }
   debutStats.sort((a, b) => (b.is_debut ? 1 : 0) - (a.is_debut ? 1 : 0));
 
-  const peakLongevity: PeakLongevity[] = songs.slice(0, 1000).map((s) => ({ peak_rank: s.peakRank, weeks_on_board: s.maxWeeks }));
+  const peakLongevity: PeakLongevity[] = songs.slice(0, 1000).map((s) => ({ peak_rank: s.peakRank, weeks_on_board: s.maxWeeks, song: s.song, artist: s.artist }));
 
   const methodology = await getMethodologyData(supabase);
 
@@ -231,7 +232,7 @@ async function fetchPeakLongevity(supabase: ReturnType<typeof createSupabaseClie
   while (rows.length < limit) {
     const { data: page, error } = await supabase
       .from("peak_longevity")
-      .select("peak_rank, weeks_on_board")
+      .select("song, artist, peak_rank, weeks_on_board")
       .order("song", { ascending: true })
       .range(offset, offset + PAGE_SIZE - 1);
     if (error || !page?.length) break;
@@ -346,7 +347,7 @@ export default async function Home() {
       </section>
 
       {/* Q3 */}
-      <section>
+      <section className="mb-16">
         <h2 className="mb-1 text-xl font-semibold">
           Q3. What is the relationship between a song&apos;s peak rank and its chart longevity?
         </h2>
@@ -357,6 +358,20 @@ export default async function Home() {
           <strong>The story:</strong> A downward-sloping trend means higher-peaking songs (lower rank number) tend to stay longer — #1 hits and top-10 songs often have more staying power than songs that never cracked the upper half of the chart.
         </p>
         <ChartPeakVsLongevity data={data!.peakLongevity} />
+      </section>
+
+      {/* Q4 */}
+      <section>
+        <h2 className="mb-1 text-xl font-semibold">
+          Q4. How has the longevity of Billboard Hot 100 songs changed over time, and what does this reveal about shifting chart dynamics in the streaming era?
+        </h2>
+        <p className="mb-4 max-w-2xl text-sm text-zinc-600 dark:text-zinc-400">
+          <strong>Axes:</strong> Same as Q1 — X = debut year, Y = average lifespan in weeks. The shaded band marks the streaming era (2013 onward), when on-demand streaming consumption began reshaping how hits climb and fade.
+        </p>
+        <p className="mb-4 max-w-2xl text-sm text-zinc-600 dark:text-zinc-400">
+          <strong>The story:</strong> Compare the gray dashed line (pre-streaming average) to the blue dashed line (streaming-era average). A lower streaming-era average suggests faster chart turnover—songs peak and drop quickly as algorithms and playlists drive bursts of attention. The trend within each era reveals whether longevity is still declining or has stabilized.
+        </p>
+        <ChartLongevityStreamingEra data={data!.lifespanByYear} />
       </section>
     </main>
   );

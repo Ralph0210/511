@@ -16,7 +16,7 @@ import * as d3 from "d3";
  *   the average relationship: do higher-peaking songs (lower rank number) chart longer?
  * - d3.bin for binning peak_rank if we want a binned view — but scatter + trend is standard.
  */
-type DataPoint = { peak_rank: number; weeks_on_board: number };
+type DataPoint = { peak_rank: number; weeks_on_board: number; song?: string; artist?: string };
 
 function linearRegression(data: DataPoint[]): { m: number; b: number } {
   const n = data.length;
@@ -34,10 +34,12 @@ function linearRegression(data: DataPoint[]): { m: number; b: number } {
 
 export default function ChartPeakVsLongevity({ data }: { data: DataPoint[] }) {
   const svgRef = useRef<SVGSVGElement>(null);
+  const tooltipRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!data.length || !svgRef.current) return;
 
+    const tooltip = tooltipRef.current;
     const margin = { top: 24, right: 24, bottom: 48, left: 52 };
     const width = 640 - margin.left - margin.right;
     const height = 400 - margin.top - margin.bottom;
@@ -81,16 +83,55 @@ export default function ChartPeakVsLongevity({ data }: { data: DataPoint[] }) {
       .attr("d", trendLine);
 
     // Scatter: semi-transparent circles for overplotting
-    svg
-      .selectAll("circle")
+    const scatter = svg
+      .selectAll("circle.scatter-point")
       .data(data)
       .join("circle")
+      .attr("class", "scatter-point")
       .attr("cx", (d) => xScale(d.peak_rank))
       .attr("cy", (d) => yScale(d.weeks_on_board))
       .attr("r", 2.5)
       .attr("fill", "steelblue")
       .attr("fill-opacity", 0.35)
       .attr("stroke", "none");
+
+    // Invisible larger hit areas for hover (drawn on top)
+    svg
+      .selectAll("circle.hover-hit")
+      .data(data)
+      .join("circle")
+      .attr("class", "hover-hit")
+      .attr("cx", (d) => xScale(d.peak_rank))
+      .attr("cy", (d) => yScale(d.weeks_on_board))
+      .attr("r", 10)
+      .attr("fill", "transparent")
+      .attr("pointer-events", "all")
+      .style("cursor", "pointer")
+      .on("mouseenter", function (event, d) {
+        if (!tooltip) return;
+        const idx = svg.selectAll("circle.hover-hit").nodes().indexOf(this);
+        const title = d.song && d.artist ? `${d.song} — ${d.artist}` : `Peak #${d.peak_rank}`;
+        tooltip.innerHTML = `
+          <strong>${title}</strong><br/>
+          Peak rank: #${d.peak_rank}<br/>
+          Weeks on chart: ${d.weeks_on_board}
+        `;
+        tooltip.style.display = "block";
+        tooltip.style.left = `${event.clientX + 12}px`;
+        tooltip.style.top = `${event.clientY + 12}px`;
+        scatter.filter((_, i) => i === idx).attr("fill-opacity", 0.9).attr("r", 5).raise();
+      })
+      .on("mousemove", function (event) {
+        if (!tooltip || tooltip.style.display !== "block") return;
+        tooltip.style.left = `${event.clientX + 12}px`;
+        tooltip.style.top = `${event.clientY + 12}px`;
+      })
+      .on("mouseleave", function (event, d) {
+        if (!tooltip) return;
+        const idx = svg.selectAll("circle.hover-hit").nodes().indexOf(this);
+        tooltip.style.display = "none";
+        scatter.filter((_, i) => i === idx).attr("fill-opacity", 0.35).attr("r", 2.5);
+      });
 
     // Axes
     svg
@@ -142,8 +183,13 @@ export default function ChartPeakVsLongevity({ data }: { data: DataPoint[] }) {
   }, [data]);
 
   return (
-    <div className="overflow-x-auto">
+    <div className="relative overflow-x-auto">
       <svg ref={svgRef} className="min-w-[640px]" />
+      <div
+        ref={tooltipRef}
+        className="pointer-events-none fixed z-50 hidden rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm shadow-lg dark:border-zinc-700 dark:bg-zinc-900"
+        style={{ display: "none" }}
+      />
     </div>
   );
 }

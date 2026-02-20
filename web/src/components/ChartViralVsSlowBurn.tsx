@@ -7,10 +7,12 @@ type BoxStats = { groupLabel: string; avg_weeks: number; median_weeks: number; q
 
 export default function ChartViralVsSlowBurn({ stats }: { stats: BoxStats[] }) {
   const svgRef = useRef<SVGSVGElement>(null);
+  const tooltipRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!stats.length || !svgRef.current) return;
 
+    const tooltip = tooltipRef.current;
     const margin = { top: 24, right: 24, bottom: 56, left: 72 };
     const width = 520 - margin.left - margin.right;
     const height = 320 - margin.top - margin.bottom;
@@ -37,19 +39,23 @@ export default function ChartViralVsSlowBurn({ stats }: { stats: BoxStats[] }) {
       const groupKey = `${s.groupLabel} (n=${s.song_count})`;
       const x = (xScale(groupKey) ?? 0) + (xScale.bandwidth() - boxWidth) / 2;
       const color = colors[i % colors.length];
+      const boxHeight = Math.max(2, yScale(s.q1_weeks) - yScale(s.q3_weeks));
+      const boxTop = yScale(s.q3_weeks);
 
-      svg
+      const boxGroup = svg.append("g").attr("class", "box-group");
+
+      boxGroup
         .append("rect")
         .attr("x", x)
-        .attr("y", yScale(s.q3_weeks))
+        .attr("y", boxTop)
         .attr("width", boxWidth)
-        .attr("height", Math.max(2, yScale(s.q1_weeks) - yScale(s.q3_weeks)))
+        .attr("height", boxHeight)
         .attr("fill", color)
         .attr("fill-opacity", 0.6)
         .attr("stroke", color)
         .attr("stroke-width", 1);
 
-      svg
+      boxGroup
         .append("line")
         .attr("x1", x)
         .attr("x2", x + boxWidth)
@@ -58,7 +64,7 @@ export default function ChartViralVsSlowBurn({ stats }: { stats: BoxStats[] }) {
         .attr("stroke", "#1a1a1a")
         .attr("stroke-width", 2);
 
-      svg
+      boxGroup
         .append("line")
         .attr("x1", x + boxWidth / 2)
         .attr("x2", x + boxWidth / 2)
@@ -66,9 +72,9 @@ export default function ChartViralVsSlowBurn({ stats }: { stats: BoxStats[] }) {
         .attr("y2", yScale(s.q1_weeks))
         .attr("stroke", color)
         .attr("stroke-width", 1.5);
-      svg.append("line").attr("x1", x + boxWidth / 2 - 4).attr("x2", x + boxWidth / 2 + 4).attr("y1", yScale(s.min_weeks)).attr("y2", yScale(s.min_weeks)).attr("stroke", color).attr("stroke-width", 1.5);
+      boxGroup.append("line").attr("x1", x + boxWidth / 2 - 4).attr("x2", x + boxWidth / 2 + 4).attr("y1", yScale(s.min_weeks)).attr("y2", yScale(s.min_weeks)).attr("stroke", color).attr("stroke-width", 1.5);
 
-      svg
+      boxGroup
         .append("line")
         .attr("x1", x + boxWidth / 2)
         .attr("x2", x + boxWidth / 2)
@@ -76,7 +82,44 @@ export default function ChartViralVsSlowBurn({ stats }: { stats: BoxStats[] }) {
         .attr("y2", yScale(s.max_weeks))
         .attr("stroke", color)
         .attr("stroke-width", 1.5);
-      svg.append("line").attr("x1", x + boxWidth / 2 - 4).attr("x2", x + boxWidth / 2 + 4).attr("y1", yScale(s.max_weeks)).attr("y2", yScale(s.max_weeks)).attr("stroke", color).attr("stroke-width", 1.5);
+      boxGroup.append("line").attr("x1", x + boxWidth / 2 - 4).attr("x2", x + boxWidth / 2 + 4).attr("y1", yScale(s.max_weeks)).attr("y2", yScale(s.max_weeks)).attr("stroke", color).attr("stroke-width", 1.5);
+
+      // Hit area for hover (full band height for easy targeting)
+      boxGroup
+        .append("rect")
+        .attr("x", (xScale(groupKey) ?? 0))
+        .attr("y", 0)
+        .attr("width", xScale.bandwidth())
+        .attr("height", height)
+        .attr("fill", "transparent")
+        .attr("pointer-events", "all")
+        .style("cursor", "pointer")
+        .on("mouseenter", function (event) {
+          if (!tooltip) return;
+          tooltip.innerHTML = `
+            <strong>${s.groupLabel}</strong><br/>
+            Songs: ${s.song_count.toLocaleString()}<br/>
+            Min: ${s.min_weeks} wks<br/>
+            Q1: ${s.q1_weeks} wks<br/>
+            Median: ${s.median_weeks} wks<br/>
+            Q3: ${s.q3_weeks} wks<br/>
+            Max: ${s.max_weeks} wks<br/>
+            Avg: ${s.avg_weeks.toFixed(1)} wks
+          `;
+          tooltip.style.display = "block";
+          tooltip.style.left = `${event.clientX + 12}px`;
+          tooltip.style.top = `${event.clientY + 12}px`;
+          boxGroup.select("rect").attr("fill-opacity", 0.8);
+        })
+        .on("mousemove", function (event) {
+          if (!tooltip || tooltip.style.display !== "block") return;
+          tooltip.style.left = `${event.clientX + 12}px`;
+          tooltip.style.top = `${event.clientY + 12}px`;
+        })
+        .on("mouseleave", function () {
+          if (tooltip) tooltip.style.display = "none";
+          boxGroup.select("rect").attr("fill-opacity", 0.6);
+        });
     });
 
     svg
@@ -104,8 +147,13 @@ export default function ChartViralVsSlowBurn({ stats }: { stats: BoxStats[] }) {
   }, [stats]);
 
   return (
-    <div className="overflow-x-auto">
+    <div className="relative overflow-x-auto">
       <svg ref={svgRef} className="min-w-[520px]" />
+      <div
+        ref={tooltipRef}
+        className="pointer-events-none fixed z-50 hidden rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm shadow-lg dark:border-zinc-700 dark:bg-zinc-900"
+        style={{ display: "none" }}
+      />
     </div>
   );
 }
