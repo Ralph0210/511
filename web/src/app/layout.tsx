@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Billboard Charts Explorer",
-  description: "Data visualization of Billboard Hot 100 chart history",
+  title: "Spotify Top 200 Explorer",
+  description: "Data visualization of Spotify Top 200 global chart data",
 };
 
 export default function RootLayout({

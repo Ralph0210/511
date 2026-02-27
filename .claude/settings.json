@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git check-ignore -v web/src/lib/supabase.ts)",
+      "Bash(echo \"exit: $?\")"
+    ]
+  }
+}
