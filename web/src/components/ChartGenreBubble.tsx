@@ -35,7 +35,7 @@ const GENRE_COLORS: Record<string, string> = {
 export default function ChartGenreBubble({ data }: { data: BubbleDataPoint[] }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
-  const years = [...new Set(data.map((d) => d.year))].sort();
+  const years = Array.from(new Set(data.map((d) => d.year))).sort();
   const [selectedYear, setSelectedYear] = useState<number>(years[years.length - 1] ?? 2021);
 
   useEffect(() => {
@@ -159,7 +159,7 @@ export default function ChartGenreBubble({ data }: { data: BubbleDataPoint[] }) 
     };
   }, [data, selectedYear]);
 
-  const genres = [...new Set(data.map((d) => d.genre))].sort();
+  const genres = Array.from(new Set(data.map((d) => d.genre))).sort();
 
   return (
     <div>
