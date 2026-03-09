@@ -92,7 +92,7 @@ export default function PreviewGenrePulse({ data }: Props) {
       .attr("transform", `translate(0,${h})`)
       .call(d3.axisBottom(x).ticks(5).tickFormat((d) => String(d)).tickSize(0))
       .call((g) => g.select(".domain").remove())
-      .call((g) => g.selectAll(".tick text").attr("fill", "#9ca3af").attr("font-size", 9));
+      .call((g) => g.selectAll(".tick text").attr("fill", "#71717a").attr("font-size", 9));
   }, [data]);
 
   return (

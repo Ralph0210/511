@@ -35,7 +35,7 @@ export default async function GenrePulsePage() {
       <div className="mx-auto max-w-page px-6 py-12">
         <BackLink />
         <h1 className="text-3xl font-bold tracking-tight">Genre Pulse</h1>
-        <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-6 text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
+        <div className="mt-6 rounded-xl border border-amber-800 bg-amber-950 p-6 text-amber-200">
           <p className="font-medium">Could not load genre data</p>
           <p className="mt-2 text-sm">{error}</p>
         </div>

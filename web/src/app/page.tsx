@@ -9,10 +9,10 @@ function SongCard({ song }: { song: ExemplarSong }) {
   return (
     <a
       href={`/song/${song.track_id}`}
-      className="group flex gap-4 rounded-xl border border-zinc-200 bg-white p-4 transition-all hover:border-accent/30 hover:shadow-md dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-accent/30"
+      className="group flex gap-4 rounded-xl border border-zinc-800 bg-[#181818] p-4 transition-all hover:border-accent/30 hover:shadow-md"
     >
       {/* Album art */}
-      <div className="h-16 w-16 flex-shrink-0 overflow-hidden rounded-lg bg-zinc-200 dark:bg-zinc-700">
+      <div className="h-16 w-16 flex-shrink-0 overflow-hidden rounded-lg bg-zinc-700">
         {song.album_img ? (
           <img
             src={song.album_img}
@@ -31,13 +31,13 @@ function SongCard({ song }: { song: ExemplarSong }) {
         <div className="flex items-center gap-2">
           <p className="truncate text-sm font-semibold">{song.track_name}</p>
           {song.category && (
-            <span className="hidden whitespace-nowrap rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-medium text-zinc-500 sm:inline dark:bg-zinc-800 dark:text-zinc-400">
+            <span className="hidden whitespace-nowrap rounded-full bg-zinc-800 px-2 py-0.5 text-[10px] font-medium text-zinc-400 sm:inline">
               {song.category}
             </span>
           )}
         </div>
         <p className="truncate text-xs text-muted">{song.artist_name}</p>
-        <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+        <p className="mt-1 text-xs text-zinc-400">
           {song.hook}
         </p>
       </div>
@@ -45,7 +45,7 @@ function SongCard({ song }: { song: ExemplarSong }) {
       {/* Arrow */}
       <div className="flex items-center">
         <svg
-          className="h-4 w-4 text-zinc-300 transition-all group-hover:text-accent group-hover:translate-x-0.5 dark:text-zinc-600"
+          className="h-4 w-4 text-zinc-600 transition-all group-hover:text-accent group-hover:translate-x-0.5"
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"

@@ -42,7 +42,7 @@ export default function PreviewLongevity({ data }: Props) {
       g.append("line")
         .attr("x1", 0).attr("x2", w)
         .attr("y1", y(tick)).attr("y2", y(tick))
-        .attr("stroke", "#e5e7eb").attr("stroke-dasharray", "2,3").attr("opacity", 0.5);
+        .attr("stroke", "#3f3f46").attr("stroke-dasharray", "2,3").attr("opacity", 0.5);
     });
 
     // Points
@@ -64,19 +64,19 @@ export default function PreviewLongevity({ data }: Props) {
       .attr("transform", `translate(0,${h})`)
       .call(d3.axisBottom(x).ticks(5).tickSize(0))
       .call((g) => g.select(".domain").remove())
-      .call((g) => g.selectAll(".tick text").attr("fill", "#9ca3af").attr("font-size", 8).attr("dy", 8));
+      .call((g) => g.selectAll(".tick text").attr("fill", "#71717a").attr("font-size", 8).attr("dy", 8));
 
     g.append("text")
       .attr("x", w / 2).attr("y", h + 24)
       .attr("text-anchor", "middle")
-      .attr("font-size", 8).attr("fill", "#9ca3af")
+      .attr("font-size", 8).attr("fill", "#71717a")
       .text("Weeks on Chart");
 
     // Y axis
     g.append("g")
       .call(d3.axisLeft(y).tickValues([1, 50, 100, 150, 200]).tickSize(0))
       .call((g) => g.select(".domain").remove())
-      .call((g) => g.selectAll(".tick text").attr("fill", "#9ca3af").attr("font-size", 8).attr("dx", -2));
+      .call((g) => g.selectAll(".tick text").attr("fill", "#71717a").attr("font-size", 8).attr("dx", -2));
 
     // Legend
     const legendCats: LongevityCategory[] = ["viral", "sustained", "slow_burn"];
@@ -89,7 +89,7 @@ export default function PreviewLongevity({ data }: Props) {
       legend.append("text")
         .attr("x", lx + 6).attr("y", 7)
         .text(CATEGORY_LABELS[cat])
-        .attr("font-size", 7).attr("fill", "#9ca3af");
+        .attr("font-size", 7).attr("fill", "#71717a");
     });
   }, [data]);
 

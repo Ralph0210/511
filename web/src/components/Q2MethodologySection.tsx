@@ -31,7 +31,7 @@ export default function Q2MethodologySection({ methodology }: { methodology: Met
 
   if (!methodology) {
     return (
-      <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
+      <div className="rounded-lg border border-amber-800 bg-amber-950 p-4 text-sm text-amber-200">
         Methodology options require <code>chart_entries</code> with <code>rank</code> column. Ensure your data includes rank for each week.
       </div>
     );
@@ -50,17 +50,17 @@ export default function Q2MethodologySection({ methodology }: { methodology: Met
 
   return (
     <div>
-      <div className="mb-4 rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm dark:border-zinc-800 dark:bg-zinc-900">
+      <div className="mb-4 rounded-lg border border-zinc-800 bg-[#181818] px-4 py-3 text-sm">
         <strong>Data source:</strong>{" "}
         {sampleInfo.isFullDataset ? (
           <>Full dataset — {sampleInfo.songCount.toLocaleString()} songs ({sampleInfo.rowCount.toLocaleString()} chart rows)</>
         ) : (
           <>
             Sample — {sampleInfo.songCount.toLocaleString()} songs from {sampleInfo.rowCount.toLocaleString()}{totalStr} rows ({dateStr}).{" "}
-            <span className="text-zinc-600 dark:text-zinc-400">
+            <span className="text-zinc-400">
               <strong>Sampling method:</strong> Temporal prioritization (earliest-chart-first). We cap at 150k rows to balance load time with completeness. 
               This preserves <em>complete song-level runs</em> for all included songs—no truncation mid-run—and ensures representation from chart inception (1958). 
-              Run <code className="rounded bg-zinc-200 px-1 dark:bg-zinc-700">002_analytics_views.sql</code> for full-population results.
+              Run <code className="rounded bg-zinc-700 px-1">002_analytics_views.sql</code> for full-population results.
             </span>
           </>
         )}
@@ -72,19 +72,19 @@ export default function Q2MethodologySection({ methodology }: { methodology: Met
             onClick={() => setActive(opt.id)}
             className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
               active === opt.id
-                ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
-                : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
+                ? "bg-white text-zinc-900"
+                : "bg-zinc-800 text-zinc-300 hover:bg-zinc-700"
             }`}
           >
             {opt.label}
           </button>
         ))}
       </div>
-      <p className="mb-4 text-sm text-zinc-600 dark:text-zinc-400">{activeOption.desc}</p>
+      <p className="mb-4 text-sm text-zinc-400">{activeOption.desc}</p>
       {stats.length ? (
         <ChartViralVsSlowBurn stats={stats} />
       ) : (
-        <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-6 text-center text-sm text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400">
+        <div className="rounded-lg border border-zinc-800 bg-[#181818] p-6 text-center text-sm text-zinc-400">
           No data for this methodology with the current sample.
         </div>
       )}

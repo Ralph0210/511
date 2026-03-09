@@ -2,6 +2,7 @@ import { createSupabaseClient } from "./supabase";
 import {
   classifySongLongevity,
   classifyGenre,
+  deduplicateSummaries,
   type SongSummary,
   type LongevityCategory,
   LONGEVITY_LABELS,
@@ -100,7 +101,7 @@ async function fetchAllSongs(): Promise<SongSummary[]> {
     offset += PAGE_SIZE;
   }
 
-  return allSongs;
+  return deduplicateSummaries(allSongs);
 }
 
 // ---------- Homepage: 3 exemplars per viz + preview chart data ----------

@@ -53,7 +53,7 @@ export default function ChartRankTrajectory({ data, peakRank, weeksOnChart }: Pr
       .join("line")
       .attr("x1", 0).attr("x2", w)
       .attr("y1", (d) => y(d)).attr("y2", (d) => y(d))
-      .attr("stroke", "#f3f4f6").attr("stroke-dasharray", "3,3");
+      .attr("stroke", "#27272a").attr("stroke-dasharray", "3,3");
 
     // Rank tier labels
     g.selectAll(".tier-label")
@@ -65,28 +65,28 @@ export default function ChartRankTrajectory({ data, peakRank, weeksOnChart }: Pr
       ])
       .join("text")
       .attr("x", w + 4).attr("y", (d) => y(d.rank))
-      .attr("dy", "0.35em").attr("font-size", 8).attr("fill", "#d1d5db")
+      .attr("dy", "0.35em").attr("font-size", 8).attr("fill", "#52525b")
       .text((d) => d.label);
 
     // X axis
     g.append("g")
       .attr("transform", `translate(0,${h})`)
       .call(d3.axisBottom(x).ticks(6))
-      .call((g) => g.select(".domain").attr("stroke", "#e5e7eb"))
-      .call((g) => g.selectAll(".tick line").attr("stroke", "#e5e7eb"))
-      .call((g) => g.selectAll(".tick text").attr("fill", "#9ca3af").attr("font-size", 10));
+      .call((g) => g.select(".domain").attr("stroke", "#3f3f46"))
+      .call((g) => g.selectAll(".tick line").attr("stroke", "#3f3f46"))
+      .call((g) => g.selectAll(".tick text").attr("fill", "#71717a").attr("font-size", 10));
 
     // Y axis
     g.append("g")
       .call(d3.axisLeft(y).tickValues([1, 10, 50, 100, 200]))
-      .call((g) => g.select(".domain").attr("stroke", "#e5e7eb"))
-      .call((g) => g.selectAll(".tick line").attr("stroke", "#e5e7eb"))
-      .call((g) => g.selectAll(".tick text").attr("fill", "#9ca3af").attr("font-size", 10));
+      .call((g) => g.select(".domain").attr("stroke", "#3f3f46"))
+      .call((g) => g.selectAll(".tick line").attr("stroke", "#3f3f46"))
+      .call((g) => g.selectAll(".tick text").attr("fill", "#71717a").attr("font-size", 10));
 
     g.append("text")
       .attr("transform", "rotate(-90)")
       .attr("x", -h / 2).attr("y", -35)
-      .attr("text-anchor", "middle").attr("font-size", 11).attr("fill", "#9ca3af")
+      .attr("text-anchor", "middle").attr("font-size", 11).attr("fill", "#71717a")
       .text("Chart Rank");
 
     // Area
@@ -100,7 +100,7 @@ export default function ChartRankTrajectory({ data, peakRank, weeksOnChart }: Pr
     g.append("path")
       .datum(sortedData)
       .attr("d", area)
-      .attr("fill", "#2563EB")
+      .attr("fill", "#1DB954")
       .attr("opacity", 0.06);
 
     // Line — animate with progress
@@ -115,7 +115,7 @@ export default function ChartRankTrajectory({ data, peakRank, weeksOnChart }: Pr
       .datum(sortedData)
       .attr("d", line)
       .attr("fill", "none")
-      .attr("stroke", "#2563EB")
+      .attr("stroke", "#1DB954")
       .attr("stroke-width", 2.5);
 
     // Animate: draw line progressively
@@ -136,24 +136,24 @@ export default function ChartRankTrajectory({ data, peakRank, weeksOnChart }: Pr
       g.append("circle")
         .attr("cx", x(peakDate)).attr("cy", y(peakPoint.rank))
         .attr("r", 5)
-        .attr("fill", "#2563EB")
+        .attr("fill", "#1DB954")
         .attr("stroke", "white").attr("stroke-width", 2);
 
       g.append("text")
         .attr("x", x(peakDate))
         .attr("y", y(peakPoint.rank) - 12)
         .attr("text-anchor", "middle")
-        .attr("font-size", 11).attr("font-weight", 600).attr("fill", "#2563EB")
+        .attr("font-size", 11).attr("font-weight", 600).attr("fill", "#1DB954")
         .text(`Peak: #${peakPoint.rank}`);
     }
   }, [data, progress]);
 
   return (
     <ScrollyProgress onProgress={handleProgress} className="mt-8">
-      <div className="rounded-2xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
+      <div className="rounded-2xl border border-zinc-800 bg-[#181818] p-4">
         <div className="mb-3 flex items-center gap-4 text-xs text-muted">
-          <span>Peak: <strong className="text-zinc-900 dark:text-zinc-100">#{peakRank}</strong></span>
-          <span>Weeks on chart: <strong className="text-zinc-900 dark:text-zinc-100">{weeksOnChart}</strong></span>
+          <span>Peak: <strong className="text-zinc-100">#{peakRank}</strong></span>
+          <span>Weeks on chart: <strong className="text-zinc-100">{weeksOnChart}</strong></span>
         </div>
         <svg ref={svgRef} className="w-full" />
       </div>

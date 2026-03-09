@@ -9,12 +9,16 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        surface: "#FFFFFF",
-        accent: {
-          DEFAULT: "#2563EB",
-          warm: "#F59E0B",
+        surface: {
+          DEFAULT: "#181818",
+          hover: "#282828",
+          raised: "#282828",
         },
-        muted: "#6B7280",
+        accent: {
+          DEFAULT: "#1DB954",
+          warm: "#D97706",
+        },
+        muted: "#B3B3B3",
       },
       fontFamily: {
         sans: ["Inter", "system-ui", "sans-serif"],

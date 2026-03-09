@@ -18,6 +18,7 @@ export type FeaturedSongData = {
     rise: SongStoryChapter;
     sound: SongStoryChapter;
     context: SongStoryChapter;
+    stayingPower?: SongStoryChapter;
   };
   outro: string;
 };

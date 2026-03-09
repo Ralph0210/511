@@ -63,7 +63,7 @@ export default function ChartRadarFeatures({ songFeatures, eraAverage, songName 
       g.append("circle")
         .attr("r", r)
         .attr("fill", "none")
-        .attr("stroke", "#e5e7eb")
+        .attr("stroke", "#3f3f46")
         .attr("stroke-dasharray", i < levels ? "2,3" : "none")
         .attr("stroke-width", i === levels ? 1 : 0.5);
     }
@@ -77,7 +77,7 @@ export default function ChartRadarFeatures({ songFeatures, eraAverage, songName 
       g.append("line")
         .attr("x1", 0).attr("y1", 0)
         .attr("x2", x).attr("y2", y)
-        .attr("stroke", "#e5e7eb").attr("stroke-width", 0.5);
+        .attr("stroke", "#3f3f46").attr("stroke-width", 0.5);
 
       const labelR = radius + 20;
       g.append("text")
@@ -124,12 +124,12 @@ export default function ChartRadarFeatures({ songFeatures, eraAverage, songName 
     // Era average (gray, background)
     drawPolygon(eraAverage, "#9CA3AF", 0.1, 1);
     // Song (accent, foreground)
-    drawPolygon(songFeatures, "#2563EB", 0.15, 2);
+    drawPolygon(songFeatures, "#1DB954", 0.15, 2);
   }, [songFeatures, eraAverage]);
 
   return (
     <ScrollySection>
-      <div className="mt-8 rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900">
+      <div className="mt-8 rounded-2xl border border-zinc-800 bg-[#181818] p-6">
         <div className="flex justify-center">
           <svg ref={svgRef} />
         </div>

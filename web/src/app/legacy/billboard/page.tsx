@@ -287,16 +287,16 @@ export default async function Home() {
     return (
       <main className="mx-auto max-w-4xl px-6 py-12">
         <h1 className="mb-6 text-2xl font-bold">Billboard Charts Explorer</h1>
-        <div className="rounded-lg border border-amber-200 bg-amber-50 p-6 text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
+        <div className="rounded-lg border border-amber-800 bg-amber-950 p-6 text-amber-200">
           <p className="font-medium">Could not load analytics</p>
           <p className="mt-2 text-sm">{error ?? "No data returned"}</p>
           <p className="mt-4 text-sm">
             These charts require analytics views. Run the SQL in{" "}
-            <code className="rounded bg-amber-100 px-1 dark:bg-amber-900">supabase/migrations/002_analytics_views.sql</code>{" "}
+            <code className="rounded bg-amber-900 px-1">supabase/migrations/002_analytics_views.sql</code>{" "}
             in your Supabase SQL Editor, then refresh.
           </p>
           <p className="mt-2 text-xs opacity-80">
-            Ensure <code className="rounded bg-amber-100 px-1 dark:bg-amber-900">chart_entries</code> exists and has data.
+            Ensure <code className="rounded bg-amber-900 px-1">chart_entries</code> exists and has data.
           </p>
         </div>
       </main>
@@ -306,13 +306,13 @@ export default async function Home() {
   return (
     <main className="mx-auto max-w-5xl px-6 py-12">
       <h1 className="mb-2 text-3xl font-bold tracking-tight">Billboard Charts Explorer</h1>
-      <p className="mb-14 text-zinc-600 dark:text-zinc-400">
+      <p className="mb-14 text-zinc-400">
         Analytical visualizations answering key questions about Hot 100 chart dynamics
       </p>
       {data!.isFallback && (
-        <div className="mb-8 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-sm text-blue-800 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-200">
+        <div className="mb-8 rounded-lg border border-blue-800 bg-blue-950 px-4 py-2 text-sm text-blue-200">
           Using fallback: analytics computed from <code>chart_entries</code> (sample). Run{" "}
-          <code className="rounded bg-blue-100 px-1 dark:bg-blue-900">supabase/migrations/002_analytics_views.sql</code>{" "}
+          <code className="rounded bg-blue-900 px-1">supabase/migrations/002_analytics_views.sql</code>{" "}
           in Supabase for full-dataset accuracy.
         </div>
       )}
@@ -322,11 +322,11 @@ export default async function Home() {
         <h2 className="mb-1 text-xl font-semibold">
           Q1. How has the average lifespan of songs on the Billboard Hot 100 changed over time?
         </h2>
-        <p className="mb-4 max-w-2xl text-sm text-zinc-600 dark:text-zinc-400">
+        <p className="mb-4 max-w-2xl text-sm text-zinc-400">
           <strong>Axes:</strong> X = debut year (when the song first entered the chart). Y = average lifespan in weeks (max weeks each song stayed on the chart).
           Each point is the mean across all songs that debuted that year.
         </p>
-        <p className="mb-4 max-w-2xl text-sm text-zinc-600 dark:text-zinc-400">
+        <p className="mb-4 max-w-2xl text-sm text-zinc-400">
           <strong>The story:</strong> Are songs burning brighter and shorter now, or sticking around longer? A declining line suggests chart turnover has sped up; a rising line suggests more enduring hits.
         </p>
         <ChartAvgLifespanOverTime data={data!.lifespanByYear} />
@@ -337,10 +337,10 @@ export default async function Home() {
         <h2 className="mb-1 text-xl font-semibold">
           Q2. Do viral songs (fast rise) vs slow-burn songs tend to have different chart longevity?
         </h2>
-        <p className="mb-4 max-w-2xl text-sm text-zinc-600 dark:text-zinc-400">
+        <p className="mb-4 max-w-2xl text-sm text-zinc-400">
           <strong>Axes:</strong> X = methodology-defined groups (toggle below). Y = weeks on chart — total run per song. Box = IQR, line = median, whiskers = min to max.
         </p>
-        <p className="mb-4 max-w-2xl text-sm text-zinc-600 dark:text-zinc-400">
+        <p className="mb-4 max-w-2xl text-sm text-zinc-400">
           <strong>The story:</strong> Compare different ways of defining &quot;viral&quot; vs &quot;slow burn.&quot; Does debut rank, climb speed, or trajectory shape better predict staying power?
         </p>
         <Q2MethodologySection methodology={data!.methodology} />
@@ -351,10 +351,10 @@ export default async function Home() {
         <h2 className="mb-1 text-xl font-semibold">
           Q3. What is the relationship between a song&apos;s peak rank and its chart longevity?
         </h2>
-        <p className="mb-4 max-w-2xl text-sm text-zinc-600 dark:text-zinc-400">
+        <p className="mb-4 max-w-2xl text-sm text-zinc-400">
           <strong>Axes:</strong> X = peak rank (1 = reached #1, 100 = peaked near the bottom). Y = weeks on chart. Each point is one song. The red dashed line is the trend.
         </p>
-        <p className="mb-4 max-w-2xl text-sm text-zinc-600 dark:text-zinc-400">
+        <p className="mb-4 max-w-2xl text-sm text-zinc-400">
           <strong>The story:</strong> A downward-sloping trend means higher-peaking songs (lower rank number) tend to stay longer — #1 hits and top-10 songs often have more staying power than songs that never cracked the upper half of the chart.
         </p>
         <ChartPeakVsLongevity data={data!.peakLongevity} />
@@ -365,10 +365,10 @@ export default async function Home() {
         <h2 className="mb-1 text-xl font-semibold">
           Q4. How has the longevity of Billboard Hot 100 songs changed over time, and what does this reveal about shifting chart dynamics in the streaming era?
         </h2>
-        <p className="mb-4 max-w-2xl text-sm text-zinc-600 dark:text-zinc-400">
+        <p className="mb-4 max-w-2xl text-sm text-zinc-400">
           <strong>Axes:</strong> Same as Q1 — X = debut year, Y = average lifespan in weeks. The shaded band marks the streaming era (2013 onward), when on-demand streaming consumption began reshaping how hits climb and fade.
         </p>
-        <p className="mb-4 max-w-2xl text-sm text-zinc-600 dark:text-zinc-400">
+        <p className="mb-4 max-w-2xl text-sm text-zinc-400">
           <strong>The story:</strong> Compare the gray dashed line (pre-streaming average) to the blue dashed line (streaming-era average). A lower streaming-era average suggests faster chart turnover—songs peak and drop quickly as algorithms and playlists drive bursts of attention. The trend within each era reveals whether longevity is still declining or has stabilized.
         </p>
         <ChartLongevityStreamingEra data={data!.lifespanByYear} />

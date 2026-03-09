@@ -28,40 +28,53 @@ export default function ExploreFeaturedSongs({ categories }: Props) {
       <div className="mt-6 space-y-6">
         {categories.map((cat) => (
           <div key={cat.label}>
-            <h3 className="mb-2 text-sm font-medium text-zinc-500 dark:text-zinc-400">
+            <h3 className="mb-2 text-sm font-medium text-zinc-400">
               {cat.label}
             </h3>
-            <div className="grid gap-2 sm:grid-cols-3">
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
               {cat.songs.map((song) => (
                 <Link
                   key={song.track_id}
                   href={`/song/${song.track_id}`}
-                  className="group flex items-center gap-3 rounded-xl border border-zinc-100 bg-white px-3 py-2.5 transition-all hover:border-accent/30 hover:shadow-sm dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-accent/30"
+                  className="group flex gap-3 rounded-xl border border-zinc-800 bg-[#181818] p-3 transition-all hover:border-accent/30 hover:shadow-md"
                 >
-                  <div className="h-10 w-10 flex-shrink-0 overflow-hidden rounded-lg bg-zinc-200 dark:bg-zinc-700">
+                  <div className="h-12 w-12 flex-shrink-0 overflow-hidden rounded-lg bg-zinc-700">
                     {song.album_img ? (
                       <img
                         src={song.album_img}
-                        alt=""
+                        alt={`${song.track_name} album art`}
                         className="h-full w-full object-cover transition-transform group-hover:scale-105"
                       />
                     ) : (
-                      <div className="flex h-full w-full items-center justify-center text-xs text-zinc-400">
-                        ♫
+                      <div className="flex h-full w-full items-center justify-center text-sm text-zinc-400">
+                        &#9835;
                       </div>
                     )}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium">
+                    <p className="truncate text-sm font-semibold">
                       {song.track_name}
                     </p>
                     <p className="truncate text-xs text-muted">
                       {song.artist_name}
                     </p>
+                    {song.hook && (
+                      <p className="mt-0.5 truncate text-xs text-zinc-500">
+                        {song.hook}
+                      </p>
+                    )}
                   </div>
-                  <p className="hidden max-w-[180px] truncate text-xs text-zinc-400 sm:block">
-                    {song.hook}
-                  </p>
+                  <div className="flex items-center">
+                    <svg
+                      className="h-4 w-4 text-zinc-600 transition-all group-hover:text-accent group-hover:translate-x-0.5"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      strokeWidth={2}
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                    </svg>
+                  </div>
                 </Link>
               ))}
             </div>

@@ -76,7 +76,7 @@ export default function ChartGenreBubble({ data }: { data: BubbleDataPoint[] }) 
       )
       .call((g) => g.select(".domain").remove())
       .call((g) =>
-        g.selectAll(".tick line").attr("stroke", "#e5e7eb").attr("stroke-dasharray", "3,3")
+        g.selectAll(".tick line").attr("stroke", "#3f3f46").attr("stroke-dasharray", "3,3")
       );
 
     // Bubbles
@@ -165,15 +165,15 @@ export default function ChartGenreBubble({ data }: { data: BubbleDataPoint[] }) 
     <div>
       {/* Year selector */}
       <div className="mb-4 flex items-center gap-2">
-        <span className="text-sm font-medium text-zinc-600 dark:text-zinc-400">Year:</span>
+        <span className="text-sm font-medium text-zinc-400">Year:</span>
         {years.map((y) => (
           <button
             key={y}
             onClick={() => setSelectedYear(y)}
             className={`rounded-full px-3 py-1 text-sm font-medium transition ${
               selectedYear === y
-                ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-900"
-                : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700"
+                ? "bg-white text-zinc-900"
+                : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
             }`}
           >
             {y}
@@ -182,7 +182,7 @@ export default function ChartGenreBubble({ data }: { data: BubbleDataPoint[] }) 
       </div>
 
       {/* Legend */}
-      <div className="mb-4 flex flex-wrap gap-x-4 gap-y-1 text-xs text-zinc-600 dark:text-zinc-400">
+      <div className="mb-4 flex flex-wrap gap-x-4 gap-y-1 text-xs text-zinc-400">
         {genres.map((g) => (
           <span key={g} className="flex items-center gap-1">
             <span
@@ -192,13 +192,13 @@ export default function ChartGenreBubble({ data }: { data: BubbleDataPoint[] }) 
             {g}
           </span>
         ))}
-        <span className="ml-2 text-zinc-400 dark:text-zinc-500">| bubble size = avg duration</span>
+        <span className="ml-2 text-zinc-500">| bubble size = avg duration</span>
       </div>
 
       <div className="relative overflow-x-auto" ref={containerRef} />
       <div
         ref={tooltipRef}
-        className="pointer-events-none fixed z-50 hidden rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm shadow-lg dark:border-zinc-700 dark:bg-zinc-900"
+        className="pointer-events-none fixed z-50 hidden rounded-lg border border-zinc-700 bg-[#181818] px-3 py-2 text-sm shadow-lg"
         style={{ display: "none" }}
       />
     </div>

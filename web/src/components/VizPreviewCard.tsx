@@ -21,13 +21,13 @@ export default function VizPreviewCard({
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5 }}
-      className="group rounded-2xl border border-zinc-200 bg-white p-6 transition-shadow hover:shadow-lg dark:border-zinc-800 dark:bg-zinc-900"
+      className="group rounded-2xl border border-zinc-800 bg-[#181818] p-6 transition-shadow hover:shadow-lg hover:shadow-accent/5"
     >
       <h3 className="text-lg font-semibold tracking-tight">{title}</h3>
       <p className="mt-1 text-sm text-muted">{subtitle}</p>
 
       {/* Preview visualization area */}
-      <div className="mt-5 h-48 overflow-hidden rounded-xl bg-zinc-50 dark:bg-zinc-800/50">
+      <div className="mt-5 h-48 overflow-hidden rounded-xl bg-zinc-800/50">
         {children}
       </div>
 

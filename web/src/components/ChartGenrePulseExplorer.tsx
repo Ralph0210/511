@@ -157,8 +157,8 @@ export default function ChartGenrePulseExplorer({ data }: Props) {
       // Y axis
       g.append("g")
         .call(d3.axisLeft(y).ticks(6).tickFormat((d) => `${d}%`))
-        .call((g) => g.select(".domain").attr("stroke", "#e5e7eb"))
-        .call((g) => g.selectAll(".tick line").attr("stroke", "#e5e7eb"))
+        .call((g) => g.select(".domain").attr("stroke", "#3f3f46"))
+        .call((g) => g.selectAll(".tick line").attr("stroke", "#3f3f46"))
         .call((g) => g.selectAll(".tick text").attr("fill", "#6b7280").attr("font-size", 10));
 
       // X axis
@@ -166,8 +166,8 @@ export default function ChartGenrePulseExplorer({ data }: Props) {
       g.append("g")
         .attr("transform", `translate(0,${h})`)
         .call(d3.axisBottom(x).tickValues(periods.filter((_, i) => i % tickInterval === 0)))
-        .call((g) => g.select(".domain").attr("stroke", "#e5e7eb"))
-        .call((g) => g.selectAll(".tick line").attr("stroke", "#e5e7eb"))
+        .call((g) => g.select(".domain").attr("stroke", "#3f3f46"))
+        .call((g) => g.selectAll(".tick line").attr("stroke", "#3f3f46"))
         .call((g) =>
           g.selectAll(".tick text").attr("fill", "#6b7280").attr("font-size", 9).attr("transform", "rotate(-30)").attr("text-anchor", "end")
         );
@@ -199,16 +199,16 @@ export default function ChartGenrePulseExplorer({ data }: Props) {
         .call(d3.axisLeft(y).ticks(6).tickFormat((d) =>
           metric === "avg_streams" ? d3.format(".2s")(d as number) : String(Math.round(d as number))
         ))
-        .call((g) => g.select(".domain").attr("stroke", "#e5e7eb"))
-        .call((g) => g.selectAll(".tick line").attr("stroke", "#e5e7eb"))
+        .call((g) => g.select(".domain").attr("stroke", "#3f3f46"))
+        .call((g) => g.selectAll(".tick line").attr("stroke", "#3f3f46"))
         .call((g) => g.selectAll(".tick text").attr("fill", "#6b7280").attr("font-size", 10));
 
       const tickInterval = Math.max(1, Math.floor(periods.length / 10));
       g.append("g")
         .attr("transform", `translate(0,${h})`)
         .call(d3.axisBottom(x).tickValues(periods.filter((_, i) => i % tickInterval === 0)))
-        .call((g) => g.select(".domain").attr("stroke", "#e5e7eb"))
-        .call((g) => g.selectAll(".tick line").attr("stroke", "#e5e7eb"))
+        .call((g) => g.select(".domain").attr("stroke", "#3f3f46"))
+        .call((g) => g.selectAll(".tick line").attr("stroke", "#3f3f46"))
         .call((g) =>
           g.selectAll(".tick text").attr("fill", "#6b7280").attr("font-size", 9).attr("transform", "rotate(-30)").attr("text-anchor", "end")
         );
@@ -287,7 +287,7 @@ export default function ChartGenrePulseExplorer({ data }: Props) {
               className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
                 selectedGenres.has(genre)
                   ? "text-white"
-                  : "bg-zinc-100 text-zinc-500 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400"
+                  : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
               }`}
               style={selectedGenres.has(genre) ? { backgroundColor: GENRE_COLORS[genre] || "#9CA3AF" } : undefined}
             >
@@ -312,8 +312,8 @@ export default function ChartGenrePulseExplorer({ data }: Props) {
               onClick={() => setMetric(key)}
               className={`rounded-lg px-3 py-1 text-xs font-medium transition-colors ${
                 metric === key
-                  ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-900"
-                  : "bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400"
+                  ? "bg-white text-zinc-900"
+                  : "bg-zinc-800 text-zinc-400"
               }`}
             >
               {label}
@@ -330,8 +330,8 @@ export default function ChartGenrePulseExplorer({ data }: Props) {
               onClick={() => setGranularity(g)}
               className={`rounded-lg px-3 py-1 text-xs font-medium transition-colors ${
                 granularity === g
-                  ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-900"
-                  : "bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400"
+                  ? "bg-white text-zinc-900"
+                  : "bg-zinc-800 text-zinc-400"
               }`}
             >
               {g.charAt(0).toUpperCase() + g.slice(1)}
@@ -341,17 +341,17 @@ export default function ChartGenrePulseExplorer({ data }: Props) {
       </div>
 
       {/* Chart */}
-      <div className="relative rounded-2xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
+      <div className="relative rounded-2xl border border-zinc-800 bg-[#181818] p-4">
         <svg ref={svgRef} className="w-full" />
         <div
           ref={tooltipRef}
-          className="pointer-events-none absolute rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs shadow-lg opacity-0 transition-opacity dark:border-zinc-700 dark:bg-zinc-800"
+          className="pointer-events-none absolute rounded-lg border border-zinc-700 bg-[#282828] px-3 py-2 text-xs shadow-lg opacity-0 transition-opacity"
           style={{ maxWidth: 200 }}
         />
       </div>
 
       {/* Insights */}
-      <div className="rounded-xl bg-zinc-50 p-5 dark:bg-zinc-800/50">
+      <div className="rounded-xl bg-zinc-800/50 p-5">
         <h3 className="text-sm font-semibold">Key Insights</h3>
         <ul className="mt-2 space-y-1 text-sm text-muted">
           <li>

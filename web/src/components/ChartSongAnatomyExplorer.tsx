@@ -30,7 +30,7 @@ const ATTRIBUTES: { key: AttributeKey; label: string; unit: string; format: (v: 
 ];
 
 const ATTR_COLORS: Record<string, string> = {
-  avg_duration: "#2563EB",
+  avg_duration: "#1DB954",
   avg_danceability: "#8B5CF6",
   avg_energy: "#EF4444",
   avg_valence: "#F59E0B",
@@ -122,8 +122,8 @@ export default function ChartSongAnatomyExplorer({ data }: Props) {
     g.append("g")
       .attr("transform", `translate(0,${h})`)
       .call(d3.axisBottom(x).ticks(8))
-      .call((g) => g.select(".domain").attr("stroke", "#e5e7eb"))
-      .call((g) => g.selectAll(".tick line").attr("stroke", "#e5e7eb"))
+      .call((g) => g.select(".domain").attr("stroke", "#3f3f46"))
+      .call((g) => g.selectAll(".tick line").attr("stroke", "#3f3f46"))
       .call((g) => g.selectAll(".tick text").attr("fill", "#6b7280").attr("font-size", 11));
 
     g.append("text")
@@ -146,8 +146,8 @@ export default function ChartSongAnatomyExplorer({ data }: Props) {
       if (attrIdx === 0) {
         g.append("g")
           .call(d3.axisLeft(yScale).ticks(6).tickFormat((d) => attrInfo.format(d as number)))
-          .call((g) => g.select(".domain").attr("stroke", "#e5e7eb"))
-          .call((g) => g.selectAll(".tick line").attr("stroke", "#e5e7eb"))
+          .call((g) => g.select(".domain").attr("stroke", "#3f3f46"))
+          .call((g) => g.selectAll(".tick line").attr("stroke", "#3f3f46"))
           .call((g) => g.selectAll(".tick text").attr("fill", color).attr("font-size", 10));
       }
 
@@ -252,7 +252,7 @@ export default function ChartSongAnatomyExplorer({ data }: Props) {
               className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
                 selectedAttrs.has(attr.key)
                   ? "text-white"
-                  : "bg-zinc-100 text-zinc-500 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400"
+                  : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
               }`}
               style={selectedAttrs.has(attr.key) ? { backgroundColor: ATTR_COLORS[attr.key] } : undefined}
             >
@@ -271,8 +271,8 @@ export default function ChartSongAnatomyExplorer({ data }: Props) {
             onClick={() => setGranularity(g)}
             className={`rounded-lg px-3 py-1 text-xs font-medium transition-colors ${
               granularity === g
-                ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-900"
-                : "bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400"
+                ? "bg-white text-zinc-900"
+                : "bg-zinc-800 text-zinc-400"
             }`}
           >
             {g.charAt(0).toUpperCase() + g.slice(1)}
@@ -281,11 +281,11 @@ export default function ChartSongAnatomyExplorer({ data }: Props) {
       </div>
 
       {/* Chart */}
-      <div className="relative rounded-2xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
+      <div className="relative rounded-2xl border border-zinc-800 bg-[#181818] p-4">
         <svg ref={svgRef} className="w-full" />
         <div
           ref={tooltipRef}
-          className="pointer-events-none absolute rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs shadow-lg opacity-0 transition-opacity dark:border-zinc-700 dark:bg-zinc-800"
+          className="pointer-events-none absolute rounded-lg border border-zinc-700 bg-[#282828] px-3 py-2 text-xs shadow-lg opacity-0 transition-opacity"
           style={{ maxWidth: 220 }}
         />
       </div>
@@ -305,7 +305,7 @@ export default function ChartSongAnatomyExplorer({ data }: Props) {
       </div>
 
       {/* Insights */}
-      <div className="rounded-xl bg-zinc-50 p-5 dark:bg-zinc-800/50">
+      <div className="rounded-xl bg-zinc-800/50 p-5">
         <h3 className="text-sm font-semibold">Key Insights</h3>
         <ul className="mt-2 space-y-1 text-sm text-muted">
           <li>

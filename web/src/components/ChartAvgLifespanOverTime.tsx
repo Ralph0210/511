@@ -171,7 +171,7 @@ export default function ChartAvgLifespanOverTime({ data }: { data: DataPoint[] }
       <svg ref={svgRef} className="min-w-[720px]" />
       <div
         ref={tooltipRef}
-        className="pointer-events-none fixed z-50 hidden rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm shadow-lg dark:border-zinc-700 dark:bg-zinc-900"
+        className="pointer-events-none fixed z-50 hidden rounded-lg border border-zinc-700 bg-[#181818] px-3 py-2 text-sm shadow-lg"
         style={{ display: "none" }}
       />
     </div>

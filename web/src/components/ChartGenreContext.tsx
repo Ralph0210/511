@@ -78,7 +78,7 @@ export default function ChartGenreContext({ data, highlightGenre, songFirstWeek,
       .data(series)
       .join("path")
       .attr("d", area as unknown as string)
-      .attr("fill", (d) => GENRE_COLORS[d.key] || "#D1D5DB")
+      .attr("fill", (d) => GENRE_COLORS[d.key] || "#52525b")
       .attr("opacity", (d) => (d.key === highlightGenre ? 0.85 : 0.3));
 
     // Highlight band for song's chart period
@@ -92,16 +92,16 @@ export default function ChartGenreContext({ data, highlightGenre, songFirstWeek,
       g.append("rect")
         .attr("x", x1).attr("y", 0)
         .attr("width", Math.max(x2 - x1, 4)).attr("height", h)
-        .attr("fill", "#2563EB").attr("opacity", 0.08);
+        .attr("fill", "#1DB954").attr("opacity", 0.08);
 
       g.append("line")
         .attr("x1", x1).attr("x2", x1)
         .attr("y1", 0).attr("y2", h)
-        .attr("stroke", "#2563EB").attr("stroke-dasharray", "4,3").attr("stroke-width", 1.5);
+        .attr("stroke", "#1DB954").attr("stroke-dasharray", "4,3").attr("stroke-width", 1.5);
 
       g.append("text")
         .attr("x", x1 + 4).attr("y", 10)
-        .attr("font-size", 9).attr("fill", "#2563EB").attr("font-weight", 500)
+        .attr("font-size", 9).attr("fill", "#1DB954").attr("font-weight", 500)
         .text("On chart");
     }
 
@@ -110,9 +110,9 @@ export default function ChartGenreContext({ data, highlightGenre, songFirstWeek,
     g.append("g")
       .attr("transform", `translate(0,${h})`)
       .call(d3.axisBottom(x).tickValues(periods.filter((_, i) => i % tickInterval === 0)))
-      .call((g) => g.select(".domain").attr("stroke", "#e5e7eb"))
+      .call((g) => g.select(".domain").attr("stroke", "#3f3f46"))
       .call((g) => g.selectAll(".tick line").remove())
-      .call((g) => g.selectAll(".tick text").attr("fill", "#9ca3af").attr("font-size", 9));
+      .call((g) => g.selectAll(".tick text").attr("fill", "#71717a").attr("font-size", 9));
 
     // Right-side labels
     series.forEach((s) => {
@@ -131,7 +131,7 @@ export default function ChartGenreContext({ data, highlightGenre, songFirstWeek,
 
   return (
     <ScrollySection>
-      <div className="mt-8 rounded-2xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
+      <div className="mt-8 rounded-2xl border border-zinc-800 bg-[#181818] p-4">
         <svg ref={svgRef} className="w-full" />
         <p className="mt-2 text-center text-xs text-muted">
           <span className="font-semibold" style={{ color: GENRE_COLORS[highlightGenre] }}>

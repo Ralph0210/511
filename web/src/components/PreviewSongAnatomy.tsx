@@ -51,7 +51,7 @@ export default function PreviewSongAnatomy({ data }: Props) {
       g.append("line")
         .attr("x1", 0).attr("x2", w)
         .attr("y1", y(tick)).attr("y2", y(tick))
-        .attr("stroke", "#e5e7eb").attr("stroke-dasharray", "2,3").attr("opacity", 0.5);
+        .attr("stroke", "#3f3f46").attr("stroke-dasharray", "2,3").attr("opacity", 0.5);
     });
 
     // Lines for each attribute
@@ -95,13 +95,13 @@ export default function PreviewSongAnatomy({ data }: Props) {
       .attr("transform", `translate(0,${h})`)
       .call(d3.axisBottom(x).ticks(5).tickFormat((d) => String(d)).tickSize(0))
       .call((g) => g.select(".domain").remove())
-      .call((g) => g.selectAll(".tick text").attr("fill", "#9ca3af").attr("font-size", 8).attr("dy", 8));
+      .call((g) => g.selectAll(".tick text").attr("fill", "#71717a").attr("font-size", 8).attr("dy", 8));
 
     // Y axis
     g.append("g")
       .call(d3.axisLeft(y).ticks(4).tickSize(0))
       .call((g) => g.select(".domain").remove())
-      .call((g) => g.selectAll(".tick text").attr("fill", "#9ca3af").attr("font-size", 8).attr("dx", -2));
+      .call((g) => g.selectAll(".tick text").attr("fill", "#71717a").attr("font-size", 8).attr("dx", -2));
   }, [data]);
 
   return (

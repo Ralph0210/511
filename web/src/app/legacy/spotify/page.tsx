@@ -142,14 +142,14 @@ export default async function SpotifyPage() {
     return (
       <main className="mx-auto max-w-4xl px-6 py-12">
         <h1 className="mb-6 text-2xl font-bold">Spotify Top 200 Explorer</h1>
-        <div className="rounded-lg border border-amber-200 bg-amber-50 p-6 text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
+        <div className="rounded-lg border border-amber-800 bg-amber-950 p-6 text-amber-200">
           <p className="font-medium">Could not load Spotify data</p>
           <p className="mt-2 text-sm">{error ?? "No data returned — the spotify_top200 table may be empty."}</p>
           <p className="mt-4 text-sm">
             Run the migration in{" "}
-            <code className="rounded bg-amber-100 px-1 dark:bg-amber-900">supabase/migrations/003_create_spotify_top200.sql</code>{" "}
+            <code className="rounded bg-amber-900 px-1">supabase/migrations/003_create_spotify_top200.sql</code>{" "}
             then seed with{" "}
-            <code className="rounded bg-amber-100 px-1 dark:bg-amber-900">python scripts/seed_spotify.py</code>.
+            <code className="rounded bg-amber-900 px-1">python scripts/seed_spotify.py</code>.
           </p>
         </div>
       </main>
@@ -159,7 +159,7 @@ export default async function SpotifyPage() {
   return (
     <main className="mx-auto max-w-5xl px-6 py-12">
       <h1 className="mb-2 text-3xl font-bold tracking-tight">Spotify Top 200 Explorer</h1>
-      <p className="mb-14 text-zinc-600 dark:text-zinc-400">
+      <p className="mb-14 text-zinc-400">
         Weekly global Spotify chart data, 2017–2021 · {totalEntries.toLocaleString()} chart entries
       </p>
 
@@ -168,11 +168,11 @@ export default async function SpotifyPage() {
         <h2 className="mb-1 text-xl font-semibold">
           Do the Top 10 songs pull further ahead of the rest of the chart over time?
         </h2>
-        <p className="mb-4 max-w-2xl text-sm text-zinc-600 dark:text-zinc-400">
+        <p className="mb-4 max-w-2xl text-sm text-zinc-400">
           <strong>Axes:</strong> X = year. Y = average weekly streams per chart entry.
           Orange = rank 1–10, Indigo = rank 11–200.
         </p>
-        <p className="mb-6 max-w-2xl text-sm text-zinc-600 dark:text-zinc-400">
+        <p className="mb-6 max-w-2xl text-sm text-zinc-400">
           <strong>The story:</strong> As streaming grew, did the top-tier songs capture a
           widening share of plays, or did streams rise proportionally across the board?
           A widening gap between the two lines signals increasing winner-takes-all concentration.
@@ -185,11 +185,11 @@ export default async function SpotifyPage() {
         <h2 className="mb-1 text-xl font-semibold">
           How do different genres perform on Spotify, and does song duration matter?
         </h2>
-        <p className="mb-4 max-w-2xl text-sm text-zinc-600 dark:text-zinc-400">
+        <p className="mb-4 max-w-2xl text-sm text-zinc-400">
           <strong>Axes:</strong> X = average chart rank (lower = better). Y = average streams.
           Color = genre. Bubble size = average song duration. Use the year selector to compare across time.
         </p>
-        <p className="mb-6 max-w-2xl text-sm text-zinc-600 dark:text-zinc-400">
+        <p className="mb-6 max-w-2xl text-sm text-zinc-400">
           <strong>The story:</strong> Genres that cluster in the top-left (low rank, high streams) dominate the chart.
           If shorter-duration genres (smaller bubbles) trend higher, it may reflect playlist-era incentives
           for shorter songs that accumulate more per-stream royalties.

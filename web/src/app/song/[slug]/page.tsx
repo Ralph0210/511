@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { FEATURED_SONGS } from "@/data/featured-songs";
 import { createSupabaseClient } from "@/lib/supabase";
-import { classifyGenre, GENRE_COLORS } from "@/lib/spotify-data";
-import { generateNarrative } from "@/lib/narrative-generator";
+import { classifyGenre, GENRE_COLORS, fetchSpotifyLifespanContext, type SpotifyLifespanContext } from "@/lib/spotify-data";
+import { generateNarrative, analyzeChartRuns, type ChartRunInfo, type PeerSong } from "@/lib/narrative-generator";
+import { fetchBillboardForSong, type BillboardSongData } from "@/lib/billboard-data";
 import SpotifyEmbed from "@/components/SpotifyEmbed";
 import SongStoryClient from "./SongStoryClient";
 
@@ -28,6 +29,12 @@ export type SongPageData = {
   maxStreams: number;
   firstWeek: string;
   lastWeek: string;
+  billboardData?: BillboardSongData | null;
+  spotifyLifespan?: SpotifyLifespanContext | null;
+  chartRunInfo: ChartRunInfo;
+  peerSongs: PeerSong[];
+  totalChartStreams: number;
+  songPeakStreams: number;
 };
 
 const MAX_TEMPO = 220;
@@ -110,6 +117,54 @@ async function fetchSongDataByTrackId(trackId: string): Promise<SongPageData | n
   const peakRank = Math.min(...trajectory.map((t) => t.rank));
   const weeksOnChart = trajectory.length;
   const maxStreams = trajectory.reduce((max, t) => Math.max(max, t.streams || 0), 0);
+  const chartRunInfo = analyzeChartRuns(trajectory);
+
+  // Try to find this song on the Billboard Hot 100
+  const genre = classifyGenre(meta.artist_genres);
+  const billboardData = await fetchBillboardForSong(
+    meta.track_name || "",
+    meta.artist_name || "",
+  ).catch(() => null);
+
+  // Fetch Spotify lifespan context for the staying power chapter
+  const spotifyLifespan = await fetchSpotifyLifespanContext(
+    trajectory.length,
+    trajectory[0].week,
+    genre,
+  ).catch(() => null);
+
+  // Fetch peer songs at peak week (the competition)
+  const peakWeekRow = trajectory.find((t) => t.rank === peakRank);
+  const peakWeekDate = peakWeekRow?.week || trajectory[0].week;
+
+  const { data: peerRows } = await supabase
+    .from("spotify_top200")
+    .select("track_id, track_name, artist_name, album_img, rank, streams")
+    .eq("week", peakWeekDate)
+    .eq("pivot", false)
+    .order("rank", { ascending: true })
+    .limit(10);
+
+  const peerSongs: PeerSong[] = (peerRows || []).map((r: Record<string, unknown>) => ({
+    track_id: r.track_id as string,
+    track_name: r.track_name as string,
+    artist_name: r.artist_name as string,
+    album_img: r.album_img as string | null,
+    rank: r.rank as number,
+    streams: r.streams as number | null,
+  }));
+
+  // Calculate total chart streams at peak week for stream share
+  const { data: totalStreamRows } = await supabase
+    .from("spotify_top200")
+    .select("streams")
+    .eq("week", peakWeekDate)
+    .eq("pivot", false);
+
+  const totalChartStreams = (totalStreamRows || []).reduce(
+    (sum: number, r: Record<string, unknown>) => sum + ((r.streams as number) || 0), 0
+  );
+  const songPeakStreams = peakWeekRow?.streams || 0;
 
   return {
     trackId,
@@ -117,7 +172,7 @@ async function fetchSongDataByTrackId(trackId: string): Promise<SongPageData | n
     artistName: meta.artist_name || "Unknown",
     albumImg: meta.album_img,
     releaseDate: meta.release_date,
-    genre: classifyGenre(meta.artist_genres),
+    genre,
     trajectory,
     songFeatures: {
       danceability: meta.danceability || 0, energy: meta.energy || 0, valence: meta.valence || 0,
@@ -130,6 +185,12 @@ async function fetchSongDataByTrackId(trackId: string): Promise<SongPageData | n
     maxStreams,
     firstWeek: trajectory[0].week,
     lastWeek: trajectory[trajectory.length - 1].week,
+    billboardData,
+    spotifyLifespan,
+    chartRunInfo,
+    peerSongs,
+    totalChartStreams,
+    songPeakStreams,
   };
 }
 
@@ -177,11 +238,29 @@ export default async function SongPage({ params }: { params: Promise<{ slug: str
   const artistName = editorialMeta?.artistName ?? songData.artistName;
   const genre = songData.genre;
 
+  const statsForNarrative = {
+    trackName, artistName, genre,
+    peakRank: songData.peakRank, weeksOnChart: songData.weeksOnChart, maxStreams: songData.maxStreams,
+    firstWeek: songData.firstWeek, lastWeek: songData.lastWeek,
+    songFeatures: songData.songFeatures, eraAverage: songData.eraAverage, trajectory: songData.trajectory,
+    chartRunInfo: songData.chartRunInfo,
+    billboardData: songData.billboardData ?? undefined,
+    spotifyLifespan: songData.spotifyLifespan
+      ? { yearAvg: songData.spotifyLifespan.yearAvg, genreAvg: songData.spotifyLifespan.genreAvg, percentileInYear: songData.spotifyLifespan.percentileInYear, totalSongsInYear: songData.spotifyLifespan.totalSongsInYear }
+      : undefined,
+    peerSongs: songData.peerSongs,
+    totalChartStreams: songData.totalChartStreams,
+    songPeakStreams: songData.songPeakStreams,
+  };
+  const generated = generateNarrative(statsForNarrative);
   const narrative = editorialMeta
-    ? { chapters: editorialMeta.chapters, outro: editorialMeta.outro }
-    : generateNarrative({ trackName, artistName, genre, peakRank: songData.peakRank, weeksOnChart: songData.weeksOnChart, maxStreams: songData.maxStreams, firstWeek: songData.firstWeek, lastWeek: songData.lastWeek, songFeatures: songData.songFeatures, eraAverage: songData.eraAverage, trajectory: songData.trajectory });
+    ? { chapters: { ...editorialMeta.chapters, moment: generated.chapters.moment, stayingPower: generated.chapters.stayingPower }, outro: editorialMeta.outro, thesis: generated.thesis, classification: generated.classification }
+    : generated;
 
   const albumImg = songData.albumImg || "";
+
+  const thesis = "thesis" in narrative ? narrative.thesis : generated.thesis;
+  const classification = "classification" in narrative ? narrative.classification : generated.classification;
 
   return (
     <div>
@@ -202,9 +281,11 @@ export default async function SongPage({ params }: { params: Promise<{ slug: str
                 {isEditorial && (
                   <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-amber-400">Curated</span>
                 )}
+                <span className="rounded-full border border-accent/30 bg-accent/10 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-accent">{classification.label}</span>
               </div>
               <h1 className="mt-2 text-4xl font-bold">{trackName}</h1>
               <p className="mt-1 text-xl text-zinc-300">{artistName}</p>
+              <p className="mt-3 max-w-xl text-base italic text-zinc-400">{thesis}</p>
               <div className="mt-4 flex flex-wrap gap-3">
                 <span className="rounded-full px-3 py-1 text-xs font-medium" style={{ backgroundColor: GENRE_COLORS[genre] || "#9CA3AF", color: "white" }}>{genre}</span>
                 <span className="rounded-full bg-white/10 px-3 py-1 text-xs">Peak #{songData.peakRank}</span>
@@ -217,7 +298,14 @@ export default async function SongPage({ params }: { params: Promise<{ slug: str
         </div>
       </div>
 
-      <SongStoryClient trackName={trackName} chapters={narrative.chapters} outro={narrative.outro} songData={songData} genre={genre} />
+      <SongStoryClient
+        trackName={trackName}
+        chapters={narrative.chapters}
+        outro={narrative.outro}
+        songData={songData}
+        genre={genre}
+        classification={classification}
+      />
     </div>
   );
 }

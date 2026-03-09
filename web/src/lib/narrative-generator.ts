@@ -1,5 +1,14 @@
 import type { SongStoryChapter } from "@/data/featured-songs";
 
+export type PeerSong = {
+  track_id?: string;
+  track_name: string;
+  artist_name: string;
+  album_img?: string | null;
+  rank: number;
+  streams: number | null;
+};
+
 type SongStats = {
   trackName: string;
   artistName: string;
@@ -26,7 +35,138 @@ type SongStats = {
     tempo: number;
   };
   trajectory: { week: string; rank: number }[];
+  chartRunInfo?: ChartRunInfo;
+  billboardData?: {
+    peakRank: number;
+    totalWeeks: number;
+    longevityPercentile: number;
+  };
+  spotifyLifespan?: {
+    yearAvg: number;
+    genreAvg: number;
+    percentileInYear: number;
+    totalSongsInYear: number;
+  };
+  peerSongs?: PeerSong[];
+  totalChartStreams?: number;
+  songPeakStreams?: number;
 };
+
+// ---------- Chart run analysis ----------
+
+export type ChartRun = {
+  startWeek: string;
+  endWeek: string;
+  weeks: number;
+  peakRank: number;
+};
+
+export type ChartRunInfo = {
+  runs: ChartRun[];
+  totalRuns: number;
+  hasReentries: boolean;
+  longestGapWeeks: number;
+  longestRunWeeks: number;
+};
+
+const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+const GAP_THRESHOLD_MS = 10 * 24 * 60 * 60 * 1000;
+
+export function analyzeChartRuns(trajectory: { week: string; rank: number }[]): ChartRunInfo {
+  if (!trajectory.length) {
+    return { runs: [], totalRuns: 0, hasReentries: false, longestGapWeeks: 0, longestRunWeeks: 0 };
+  }
+
+  const sorted = [...trajectory].sort((a, b) => a.week.localeCompare(b.week));
+  const runs: ChartRun[] = [];
+  let runStart = 0;
+
+  for (let i = 1; i <= sorted.length; i++) {
+    const isEnd = i === sorted.length;
+    let isGap = false;
+    if (!isEnd) {
+      const prev = new Date(sorted[i - 1].week + "T00:00:00").getTime();
+      const curr = new Date(sorted[i].week + "T00:00:00").getTime();
+      isGap = curr - prev > GAP_THRESHOLD_MS;
+    }
+
+    if (isEnd || isGap) {
+      const runSlice = sorted.slice(runStart, i);
+      runs.push({
+        startWeek: runSlice[0].week,
+        endWeek: runSlice[runSlice.length - 1].week,
+        weeks: runSlice.length,
+        peakRank: Math.min(...runSlice.map((d) => d.rank)),
+      });
+      runStart = i;
+    }
+  }
+
+  let longestGapWeeks = 0;
+  for (let i = 1; i < runs.length; i++) {
+    const prevEnd = new Date(runs[i - 1].endWeek + "T00:00:00").getTime();
+    const nextStart = new Date(runs[i].startWeek + "T00:00:00").getTime();
+    const gapWeeks = Math.round((nextStart - prevEnd) / ONE_WEEK_MS);
+    longestGapWeeks = Math.max(longestGapWeeks, gapWeeks);
+  }
+
+  return {
+    runs,
+    totalRuns: runs.length,
+    hasReentries: runs.length > 1,
+    longestGapWeeks,
+    longestRunWeeks: Math.max(...runs.map((r) => r.weeks)),
+  };
+}
+
+// ---------- Song classification ----------
+
+export type SongClassification = "viral-spike" | "slow-burn" | "steady-performer" | "genre-disruptor" | "comeback-king" | "chart-topper";
+
+export function classifySong(stats: SongStats): { label: string; classification: SongClassification } {
+  const runInfo = stats.chartRunInfo ?? analyzeChartRuns(stats.trajectory);
+  const features = ["danceability", "energy", "valence", "acousticness", "speechiness"] as const;
+  const maxDelta = Math.max(...features.map((f) => Math.abs(stats.songFeatures[f] - stats.eraAverage[f])));
+
+  if (runInfo.hasReentries && runInfo.totalRuns >= 3) return { label: "Comeback King", classification: "comeback-king" };
+  if (stats.peakRank === 1 && stats.weeksOnChart >= 10) return { label: "Chart Topper", classification: "chart-topper" };
+  if (maxDelta > 0.25 && stats.weeksOnChart >= 8) return { label: "Genre Disruptor", classification: "genre-disruptor" };
+
+  const peakWeekIdx = stats.trajectory.findIndex((t) => t.rank === stats.peakRank);
+  const weeksToPeak = peakWeekIdx >= 0 ? peakWeekIdx + 1 : stats.weeksOnChart;
+
+  if (stats.weeksOnChart <= 6 && stats.peakRank <= 20) return { label: "Viral Spike", classification: "viral-spike" };
+  if (weeksToPeak >= 5 && stats.weeksOnChart >= 12) return { label: "Slow Burn", classification: "slow-burn" };
+  if (stats.weeksOnChart >= 15) return { label: "Steady Performer", classification: "steady-performer" };
+  if (stats.peakRank <= 5) return { label: "Chart Topper", classification: "chart-topper" };
+  if (stats.weeksOnChart <= 8) return { label: "Viral Spike", classification: "viral-spike" };
+  return { label: "Steady Performer", classification: "steady-performer" };
+}
+
+// ---------- Thesis statement ----------
+
+export function generateThesis(stats: SongStats): string {
+  const { peakRank, weeksOnChart, trackName } = stats;
+  const { label } = classifySong(stats);
+  const runInfo = stats.chartRunInfo ?? analyzeChartRuns(stats.trajectory);
+
+  if (runInfo.hasReentries) {
+    return `A #${peakRank} peak, ${runInfo.totalRuns} chart runs, and ${weeksOnChart} total weeks \u2014 "${trackName}" refused to stay gone.`;
+  }
+  if (peakRank === 1) {
+    return `${weeksOnChart} weeks on the world\u2019s biggest chart, all the way to #1. What made "${trackName}" unstoppable?`;
+  }
+  if (weeksOnChart >= 20) {
+    return `A #${peakRank} peak across ${weeksOnChart} weeks \u2014 a ${label.toLowerCase()} that outlasted almost everything around it.`;
+  }
+  if (peakRank <= 5) {
+    return `#${peakRank} on the global chart in ${weeksOnChart} weeks. What does the data reveal about "${trackName}"?`;
+  }
+  if (weeksOnChart <= 5) {
+    return `A brief, bright flash \u2014 #${peakRank} in just ${weeksOnChart} weeks. The data tells the full story.`;
+  }
+  return `A #${peakRank} peak, ${weeksOnChart} weeks on chart. Here\u2019s the complete data story of "${trackName}."`;
+}
 
 // ---------- Helpers ----------
 
@@ -70,13 +210,24 @@ function buildRiseNarrative(stats: SongStats): SongStoryChapter {
   const firstRank = trajectory[0]?.rank ?? 100;
   const peakWeekIdx = trajectory.findIndex((t) => t.rank === peakRank);
   const weeksToPeak = peakWeekIdx >= 0 ? peakWeekIdx + 1 : weeksOnChart;
+  const runInfo = stats.chartRunInfo ?? analyzeChartRuns(trajectory);
 
-  // Beat 0: Chapter intro (shown with empty axes)
-  const beat0 = `In ${debutMonth}, "${trackName}" by ${artistName} entered the Spotify Global Top 200. Let\u2019s trace its journey through the chart.`;
+  let beat0: string;
+  if (runInfo.hasReentries) {
+    beat0 = `In ${debutMonth}, "${trackName}" by ${artistName} entered the Spotify Global Top 200. But this wasn\u2019t a simple rise and fall \u2014 the song had ${runInfo.totalRuns} separate chart runs. Let\u2019s trace the full journey.`;
+  } else {
+    beat0 = `In ${debutMonth}, "${trackName}" by ${artistName} entered the Spotify Global Top 200. Let\u2019s trace its journey through the chart.`;
+  }
 
-  // Beat 1: Line draws — describe the trajectory shape
   let beat1: string;
-  if (peakRank <= 10 && weeksToPeak <= 2) {
+  if (runInfo.hasReentries) {
+    const firstRun = runInfo.runs[0];
+    const bestRun = runInfo.runs.reduce((best, r) => r.peakRank < best.peakRank ? r : best);
+    const reentryContext = runInfo.longestGapWeeks > 8
+      ? `After falling off the chart, it returned ${runInfo.longestGapWeeks} weeks later \u2014 ${runInfo.longestGapWeeks > 20 ? "a remarkable comeback" : "a notable re-entry"}.`
+      : `The dashed gaps mark off-chart periods before each re-entry.`;
+    beat1 = `The first run lasted ${firstRun.weeks} weeks, peaking at #${firstRun.peakRank}. But the song didn\u2019t stay gone \u2014 it re-entered the chart ${runInfo.totalRuns - 1} ${runInfo.totalRuns === 2 ? "time" : "times"}. ${reentryContext} ${bestRun !== firstRun ? `The strongest run peaked at #${bestRun.peakRank}, lasting ${bestRun.weeks} weeks.` : ""}`;
+  } else if (peakRank <= 10 && weeksToPeak <= 2) {
     beat1 = `The song exploded onto the chart at #${firstRank}${firstRank <= 10 ? " \u2014 an immediate top-10 entry" : ""}, climbing to #${peakRank} within ${weeksToPeak === 1 ? "its first week" : "just two weeks"}. ${weeksOnChart <= 8 ? "A classic viral spike pattern." : "An explosive debut that held on longer than most."}`;
   } else if (weeksToPeak >= 5 && peakRank <= 30) {
     beat1 = `Entering at #${firstRank}, the song took ${weeksToPeak} weeks of steady climbing to reach its peak \u2014 a textbook slow burn, building momentum through word of mouth and playlist placement.`;
@@ -86,13 +237,11 @@ function buildRiseNarrative(stats: SongStats): SongStoryChapter {
     beat1 = `${trackName} spent ${weeksOnChart} weeks in the Top 200, ${weeksToPeak <= 3 ? "climbing quickly to its peak" : `taking ${weeksToPeak} weeks to find its stride`}. ${weeksOnChart > 10 ? "A solid chart run by any measure." : "A brief but notable appearance."}`;
   }
 
-  // Beat 2: Peak annotation — highlight the peak moment
   const beat2 = `The peak: #${peakRank}. ${peakRank === 1 ? "The very top of the global chart \u2014 the most-streamed song in the world that week." : peakRank <= 10 ? `A top-10 position, placing it among the most-streamed songs globally.` : peakRank <= 50 ? `A strong showing in the upper half of the chart.` : `Fighting for position in a field of 200 of the world\u2019s most-streamed songs.`}`;
 
-  // Beat 3: Streams overlay
   const beat3 = maxStreams > 0
-    ? `At its peak, "${trackName}" was pulling ${formatStreams(maxStreams)} streams per week. The amber bars show streaming volume alongside chart position \u2014 ${maxStreams > 10_000_000 ? "massive numbers that reflect genuine cultural reach." : "solid streaming numbers that kept it on the chart."}`
-    : `The chart position tells one side of the story. ${weeksOnChart >= 10 ? "Staying in the Top 200 for this long requires consistent streaming week after week." : "Even a short chart run means competing with the world\u2019s biggest songs."}`;
+    ? `At its peak, "${trackName}" was pulling ${formatStreams(maxStreams)} streams per week. The amber bars show streaming volume alongside chart position \u2014 ${maxStreams > 10_000_000 ? "massive numbers that reflect genuine cultural reach." : "solid streaming numbers that kept it on the chart."} But what about the song itself made it stand out?`
+    : `The chart position tells one side of the story. ${weeksOnChart >= 10 ? "Staying in the Top 200 for this long requires consistent streaming week after week." : "Even a short chart run means competing with the world\u2019s biggest songs."} But what about the song itself made it stand out?`;
 
   const narrative = `In ${debutMonth}, "${trackName}" by ${artistName} entered the Spotify Global Top 200 at #${firstRank}. ${beat1} ${beat2}${maxStreams > 0 ? ` ${beat3}` : ""}`;
 
@@ -117,7 +266,6 @@ function buildSoundNarrative(stats: SongStats): SongStoryChapter {
   }));
   deltas.sort((a, b) => b.delta - a.delta);
 
-  // Overall character
   const character =
     songFeatures.energy > 0.7 && songFeatures.danceability > 0.7
       ? "a high-energy, dance-floor-ready track"
@@ -127,22 +275,18 @@ function buildSoundNarrative(stats: SongStats): SongStoryChapter {
           ? "a sonically moody piece that leans into emotional weight"
           : "a song that carves its own sonic lane";
 
-  // Beat 0: intro with empty radar
-  const beat0 = `Every song has a sonic fingerprint. Let\u2019s break down the audio DNA of "${trackName}" and see how it compares to what else was charting in ${year}.`;
+  const beat0 = `Its chart trajectory shows how it performed. Now let\u2019s hear what it sounded like \u2014 and how it compared to everything else on the chart in ${year}.`;
 
-  // Beat 1: era average appears
-  const beat1 = `The gray shape shows the average audio profile of songs in the ${year} Spotify Top 200. This is the sonic baseline \u2014 the "typical" charting song that year across six dimensions: danceability, energy, valence, acousticness, speechiness, and tempo.`;
+  const beat1 = `The gray shape shows the average audio profile of ${year}\u2019s Spotify Top 200 \u2014 the sonic baseline across six dimensions. This is what a "typical" charting song sounded like that year.`;
 
-  // Beat 2: song polygon overlays
-  const beat2 = `Now here\u2019s "${trackName}" in blue. It\u2019s ${character}. Notice where the blue shape extends beyond or shrinks inside the gray \u2014 those are the dimensions where this song stands apart from the pack.`;
+  const beat2 = `Now here\u2019s "${trackName}" in green. It\u2019s ${character}. Notice where the green shape extends beyond or shrinks inside the gray \u2014 those are the dimensions where this song stands apart.`;
 
-  // Beat 3: distinctive features highlighted
   const top2 = deltas.slice(0, 2);
   const featureDescs = top2.map((t) => {
     const cmp = compareWord(t.value, t.avg);
     return `${t.feature} (${t.value.toFixed(2)}) is ${cmp} the chart average of ${t.avg.toFixed(2)}, making it ${featureDescriptor(t.feature, t.value)}`;
   });
-  const beat3 = `The most distinctive features: ${featureDescs.join("; and ")}. ${deltas[0].delta > 0.2 ? "These differences are significant \u2014 this song occupies a distinctly different sonic space than most of its chart neighbors." : "These subtle differences add up to a unique listening experience, even within a crowded chart."}`;
+  const beat3 = `The standout traits: ${featureDescs.join("; and ")}. ${deltas[0].delta > 0.2 ? "This song occupies a distinctly different sonic space than most of its chart neighbors." : "Subtle differences that add up to a unique listening experience."} Now let\u2019s see who it was competing against.`;
 
   const featureLines = deltas.slice(0, 3).map((t) => {
     const cmp = compareWord(t.value, t.avg);
@@ -158,40 +302,142 @@ function buildSoundNarrative(stats: SongStats): SongStoryChapter {
   };
 }
 
-function buildContextNarrative(stats: SongStats): SongStoryChapter {
-  const { trackName, genre, firstWeek } = stats;
+function buildMomentNarrative(stats: SongStats): SongStoryChapter {
+  const { trackName, genre, firstWeek, peakRank, peerSongs, totalChartStreams, songPeakStreams } = stats;
   const year = firstWeek.slice(0, 4);
+  const peakWeek = stats.trajectory.find((t) => t.rank === peakRank);
+  const peakWeekDate = peakWeek ? formatDate(peakWeek.week) : formatDate(firstWeek);
 
   const genreContexts: Record<string, string> = {
-    "Pop": `Pop has long been the chart\u2019s dominant force, but its share has been gradually shrinking as Hip Hop/Rap and Latin music expand.`,
-    "Hip Hop/Rap": `By ${year}, Hip Hop/Rap had established itself as the streaming era\u2019s powerhouse genre, consistently commanding a growing share of the global Top 200.`,
-    "Latin": `Latin music has been one of the streaming era\u2019s biggest growth stories, expanding from a niche presence to a chart staple.`,
-    "R&B": `R&B occupies a steady but modest slice of the streaming charts \u2014 never dominant, but always present.`,
-    "EDM/Dance": `EDM and Dance music peaked in chart presence around 2017-2018 before gradually losing ground to Hip Hop and Latin.`,
-    "Rock": `Rock\u2019s presence in the global streaming Top 200 has been minimal \u2014 a genre whose audience lives more in album sales and concerts than playlist culture.`,
-    "K-Pop": `K-Pop\u2019s global streaming presence has surged in the late 2010s, with dedicated fanbases driving coordinated streaming efforts.`,
-    "Country": `Country music rarely appears in the global Spotify Top 200, which skews heavily toward pop, hip hop, and Latin.`,
+    "Pop": `Pop has long been the chart\u2019s dominant force, but its share was gradually shrinking as Hip Hop/Rap and Latin music expanded.`,
+    "Hip Hop/Rap": `Hip Hop/Rap had established itself as the streaming era\u2019s powerhouse genre, commanding a growing share of the global Top 200.`,
+    "Latin": `Latin music was one of the streaming era\u2019s biggest growth stories, expanding from niche presence to chart staple.`,
+    "R&B": `R&B occupied a steady but modest slice of the streaming charts \u2014 never dominant, but always present.`,
+    "EDM/Dance": `EDM and Dance music had peaked in chart presence and was gradually losing ground to Hip Hop and Latin.`,
+    "Rock": `Rock\u2019s presence in the global streaming Top 200 was minimal \u2014 a genre whose audience lived more in album sales and concerts.`,
+    "K-Pop": `K-Pop\u2019s global streaming presence was surging, with dedicated fanbases driving coordinated streaming efforts.`,
+    "Country": `Country music rarely appeared in the global Spotify Top 200, which skews heavily toward pop, hip hop, and Latin.`,
   };
 
-  const genreNote = genreContexts[genre] || `${genre} occupies its own niche in the global streaming landscape.`;
+  const genreNote = genreContexts[genre] || `${genre} occupied its own niche in the global streaming landscape.`;
 
-  // Beat 0: intro with empty axes
-  const beat0 = `No song charts in a vacuum. Let\u2019s zoom out and see where "${trackName}" fits in the larger genre landscape of the Spotify Top 200.`;
+  // Beat 0: peer competition intro
+  let beat0: string;
+  if (peerSongs?.length) {
+    const topPeer = peerSongs.find((p) => p.rank === 1) || peerSongs[0];
+    beat0 = `No song charts in a vacuum. The week "${trackName}" peaked at #${peakRank}, the #1 song in the world was "${topPeer.track_name}" by ${topPeer.artist_name}. Here\u2019s the full competitive picture.`;
+  } else {
+    beat0 = `No song charts in a vacuum. Let\u2019s zoom out and see the competitive landscape "${trackName}" was navigating in ${peakWeekDate}.`;
+  }
 
-  // Beat 1: all genres appear (equal opacity)
-  const beat1 = `This stacked area chart shows how genre shares in the Top 200 shifted from 2017 to 2021. Each color represents a genre\u2019s share of the chart. The streaming era has reshuffled which genres dominate \u2014 and the shifts are dramatic.`;
+  // Beat 1: peer leaderboard reveal
+  let beat1: string;
+  if (peerSongs?.length) {
+    const peerCount = peerSongs.length;
+    const topNames = peerSongs.slice(0, 3).map((p) => `"${p.track_name}"`).join(", ");
+    beat1 = `This was the Top ${peerCount} the week "${trackName}" hit its peak. Names like ${topNames} filled the chart. ${peakRank <= 10 ? `At #${peakRank}, it was right in the thick of the biggest songs on the planet.` : peakRank <= 50 ? `At #${peakRank}, it held its own against the biggest songs on Earth.` : `At #${peakRank}, it was fighting for attention in a fiercely competitive field.`}`;
+  } else {
+    beat1 = `The chart was packed with competition. At #${peakRank}, "${trackName}" ${peakRank <= 20 ? "was among the elite" : "was carving out its space"} in a field of 200 of the world\u2019s most-streamed songs.`;
+  }
 
-  // Beat 2: highlight song's genre
-  const beat2 = `Now let\u2019s highlight ${genre}. ${genreNote} When "${trackName}" charted in ${year}, it entered this competitive landscape as a ${genre} entry.`;
+  // Beat 2: stream share context
+  let beat2: string;
+  if (totalChartStreams && songPeakStreams && totalChartStreams > 0) {
+    const sharePercent = ((songPeakStreams / totalChartStreams) * 100).toFixed(1);
+    beat2 = `That week, the entire Top 200 generated ${formatStreams(totalChartStreams)} streams. "${trackName}" accounted for ${sharePercent}% of that total \u2014 ${parseFloat(sharePercent) >= 2 ? "a significant share of global listening" : parseFloat(sharePercent) >= 1 ? "a solid share of the global ear" : "a slice of an enormous streaming pie"}. Now let\u2019s look at the genre landscape it entered.`;
+  } else {
+    beat2 = `Let\u2019s look at the broader genre landscape. ${genreNote} When "${trackName}" charted in ${year}, it entered this shifting terrain as a ${genre} entry.`;
+  }
 
-  // Beat 3: on-chart band
-  const beat3 = `The blue band marks the exact period when "${trackName}" was on the chart. Notice ${genre}\u2019s share during that window \u2014 this is the genre context the song was competing in, and it shaped what listeners were discovering alongside it.`;
+  // Beat 3: genre landscape with on-chart band
+  const beat3 = totalChartStreams
+    ? `This stacked area shows how genre shares in the Top 200 shifted from 2017 to 2021. ${genreNote} The green band marks "${trackName}"\u2019s time on chart \u2014 you can see exactly what the genre landscape looked like during its run.`
+    : `The green band marks the exact period when "${trackName}" was on the chart. ${genreNote} This is the genre context the song was competing in. But the real question is: how long did it last?`;
 
-  const narrative = `${genreNote} When "${trackName}" charted, it entered a genre landscape shaped by these shifts. The stacked area chart shows how genre shares moved over time \u2014 with ${genre} highlighted. The blue band marks this song\u2019s time on chart.`;
+  const narrative = `${genreNote} When "${trackName}" charted, it entered a competitive landscape shaped by these forces.`;
 
   return {
     label: "Chapter 3",
-    title: "The Context",
+    title: "The Moment",
+    narrative,
+    beats: [beat0, beat1, beat2, beat3],
+  };
+}
+
+function buildStayingPowerNarrative(stats: SongStats): SongStoryChapter {
+  const { trackName, weeksOnChart, genre, firstWeek, peerSongs } = stats;
+  const year = firstWeek.slice(0, 4);
+  const sp = stats.spotifyLifespan;
+  const bb = stats.billboardData;
+
+  // Beat 0: transition from Moment chapter
+  let beat0: string;
+  if (peerSongs?.length) {
+    const peerCount = peerSongs.length;
+    beat0 = `We saw the ${peerCount} songs competing alongside "${trackName}" at its peak. But how many of them lasted? Let\u2019s see where its ${weeksOnChart}-week run falls among all songs that charted in ${year}.`;
+  } else {
+    beat0 = `The competition was fierce. But how long did "${trackName}" actually survive? Let\u2019s see where its ${weeksOnChart}-week run falls among all songs from ${year}.`;
+  }
+
+  let beat1: string;
+  if (sp) {
+    const comparison = weeksOnChart > sp.yearAvg
+      ? `above the ${year} average of ${sp.yearAvg.toFixed(1)} weeks`
+      : weeksOnChart < sp.yearAvg
+        ? `below the ${year} average of ${sp.yearAvg.toFixed(1)} weeks`
+        : `right at the ${year} average of ${sp.yearAvg.toFixed(1)} weeks`;
+    beat1 = `This histogram shows every song that debuted on the Spotify Top 200 in ${year}. With ${weeksOnChart} weeks, "${trackName}" sits ${comparison}. It outlasted ${sp.percentileInYear}% of the ${sp.totalSongsInYear} songs that charted that year.`;
+  } else {
+    beat1 = `"${trackName}" spent ${weeksOnChart} weeks on the Spotify Global Top 200. Each bar shows how many songs lasted that long \u2014 the highlighted bar is where this song falls.`;
+  }
+
+  let beat2: string;
+  if (sp) {
+    const genreCompare = weeksOnChart > sp.genreAvg
+      ? `longer than the typical ${genre} song (${sp.genreAvg.toFixed(1)} weeks)`
+      : weeksOnChart < sp.genreAvg
+        ? `shorter than the typical ${genre} song (${sp.genreAvg.toFixed(1)} weeks)`
+        : `right in line with the typical ${genre} song (${sp.genreAvg.toFixed(1)} weeks)`;
+    const overallCompare = sp.genreAvg > sp.yearAvg
+      ? `${genre} songs tend to last longer than average on the chart`
+      : sp.genreAvg < sp.yearAvg
+        ? `${genre} songs tend to have shorter chart runs than average`
+        : `${genre} songs last about as long as the chart average`;
+    beat2 = `Now compare against genre: "${trackName}" lasted ${genreCompare}. ${overallCompare} in ${year}, and this song ${weeksOnChart > sp.genreAvg ? "exceeded" : "fell within"} that pattern.`;
+  } else {
+    beat2 = `Among ${genre} songs on the chart, this run ${weeksOnChart >= 10 ? "stands out as a solid showing" : "was a brief appearance"}.`;
+  }
+
+  let beat3: string;
+  if (bb) {
+    const bbPeakDesc = bb.peakRank === 1
+      ? "reached #1"
+      : bb.peakRank <= 10
+        ? `peaked at #${bb.peakRank}`
+        : `reached #${bb.peakRank}`;
+
+    const percentileDesc = bb.longevityPercentile >= 90
+      ? `outlasting ${bb.longevityPercentile}% of every song in 68 years of chart history`
+      : bb.longevityPercentile >= 70
+        ? `outlasting ${bb.longevityPercentile}% of all Hot 100 entries since 1958`
+        : bb.longevityPercentile >= 50
+          ? `above the historical median, outlasting ${bb.longevityPercentile}% of all entries`
+          : `outlasting ${bb.longevityPercentile}% of all entries since 1958`;
+
+    beat3 = `The Billboard Hot 100 tells a longer story. On America\u2019s definitive chart \u2014 blending radio, sales, and streaming since 1958 \u2014 "${trackName}" ${bbPeakDesc} and spent ${bb.totalWeeks} weeks on chart, ${percentileDesc}.`;
+  } else {
+    beat3 = `${weeksOnChart >= 15
+      ? `${weeksOnChart} weeks on the Spotify Top 200 is a sustained run that reflects genuine staying power. Most songs are gone within a few weeks \u2014 this one built an audience that kept coming back.`
+      : weeksOnChart >= 8
+        ? `${weeksOnChart} weeks is a solid chart run. In a chart where most songs disappear within a few weeks, maintaining position this long requires consistent listener interest.`
+        : `Even ${weeksOnChart} weeks on the Spotify Top 200 means competing with the world\u2019s most-streamed songs. The chart moves fast \u2014 a few weeks of chart presence is still a notable achievement.`}`;
+  }
+
+  const narrative = `"${trackName}" spent ${weeksOnChart} weeks on the Spotify Global Top 200. ${beat1} ${beat2}`;
+
+  return {
+    label: "Chapter 4",
+    title: "The Staying Power",
     narrative,
     beats: [beat0, beat1, beat2, beat3],
   };
@@ -200,21 +446,65 @@ function buildContextNarrative(stats: SongStats): SongStoryChapter {
 // ---------- Main Export ----------
 
 export function generateNarrative(stats: SongStats): {
-  chapters: { rise: SongStoryChapter; sound: SongStoryChapter; context: SongStoryChapter };
+  chapters: { rise: SongStoryChapter; sound: SongStoryChapter; moment: SongStoryChapter; stayingPower: SongStoryChapter };
+  thesis: string;
+  classification: { label: string; classification: SongClassification };
   outro: string;
 } {
   const chapters = {
     rise: buildRiseNarrative(stats),
     sound: buildSoundNarrative(stats),
-    context: buildContextNarrative(stats),
+    moment: buildMomentNarrative(stats),
+    stayingPower: buildStayingPowerNarrative(stats),
   };
 
-  const outro =
-    stats.weeksOnChart >= 15
-      ? `"${stats.trackName}" by ${stats.artistName} spent ${stats.weeksOnChart} weeks in the Spotify Global Top 200, peaking at #${stats.peakRank} \u2014 a sustained presence that speaks to the song\u2019s lasting impact.`
-      : stats.peakRank <= 5
-        ? `"${stats.trackName}" by ${stats.artistName} peaked at #${stats.peakRank} during its ${stats.weeksOnChart}-week chart run \u2014 reaching the top tier of global streaming.`
-        : `"${stats.trackName}" by ${stats.artistName} charted for ${stats.weeksOnChart} weeks with a peak of #${stats.peakRank}, adding its own data point to the ever-shifting story of what the world listens to.`;
+  const thesis = generateThesis(stats);
+  const classification = classifySong(stats);
 
-  return { chapters, outro };
+  // Build conclusion
+  const runInfo = stats.chartRunInfo ?? analyzeChartRuns(stats.trajectory);
+
+  const openingLine = stats.weeksOnChart >= 15
+    ? `"${stats.trackName}" by ${stats.artistName} spent ${stats.weeksOnChart} weeks in the Spotify Global Top 200, peaking at #${stats.peakRank} \u2014 a sustained presence that speaks to the song\u2019s lasting impact.`
+    : stats.peakRank <= 5
+      ? `"${stats.trackName}" by ${stats.artistName} peaked at #${stats.peakRank} during its ${stats.weeksOnChart}-week chart run \u2014 reaching the top tier of global streaming.`
+      : `"${stats.trackName}" by ${stats.artistName} charted for ${stats.weeksOnChart} weeks with a peak of #${stats.peakRank}, adding its own data point to the ever-shifting story of what the world listens to.`;
+
+  const features = ["danceability", "energy", "valence", "acousticness", "speechiness"] as const;
+  const topDelta = features
+    .map((f) => ({ f, delta: Math.abs(stats.songFeatures[f] - stats.eraAverage[f]) }))
+    .sort((a, b) => b.delta - a.delta)[0];
+  const soundVerdict = topDelta.delta > 0.2
+    ? `Sonically, it stood apart from its era \u2014 most notably in ${topDelta.f}, where it diverged significantly from the chart average.`
+    : `Its sonic profile fit comfortably within the era\u2019s chart sound, without extreme departures in any dimension.`;
+
+  let longevityVerdict = "";
+  if (stats.spotifyLifespan) {
+    const sp = stats.spotifyLifespan;
+    longevityVerdict = sp.percentileInYear >= 80
+      ? `It outlasted ${sp.percentileInYear}% of all songs that charted that year \u2014 a top-tier run by any measure.`
+      : sp.percentileInYear >= 50
+        ? `It outlasted ${sp.percentileInYear}% of its year\u2019s chart entries \u2014 above the median, a solid showing.`
+        : `Its chart run was shorter than most songs that year, but reaching the Top 200 at all is an achievement.`;
+  }
+
+  let reentryVerdict = "";
+  if (runInfo.hasReentries) {
+    reentryVerdict = `The song had ${runInfo.totalRuns} separate chart runs \u2014 proof that it kept finding new audiences even after falling off.`;
+  }
+
+  let billboardVerdict = "";
+  if (stats.billboardData) {
+    const bb = stats.billboardData;
+    billboardVerdict = bb.longevityPercentile >= 70
+      ? `On the Billboard Hot 100, it outlasted ${bb.longevityPercentile}% of every song in 68 years of chart history.`
+      : `On the Billboard Hot 100, it spent ${bb.totalWeeks} weeks \u2014 outlasting ${bb.longevityPercentile}% of all entries since 1958.`;
+  }
+
+  const conclusionParts = [openingLine, soundVerdict, longevityVerdict, reentryVerdict, billboardVerdict]
+    .filter(Boolean);
+
+  const outro = conclusionParts.join(" ");
+
+  return { chapters, thesis, classification, outro };
 }

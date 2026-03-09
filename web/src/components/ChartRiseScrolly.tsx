@@ -1,168 +1,485 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useMemo } from "react";
 import * as d3 from "d3";
+import type { ChartRunInfo } from "@/lib/narrative-generator";
 
 type DataPoint = { week: string; rank: number; streams: number | null };
 
 type Props = {
   data: DataPoint[];
   peakRank: number;
+  chartRunInfo?: ChartRunInfo;
   /**
-   * 0 = empty axes only
-   * 1 = line appears (no animation, just drawn)
-   * 2 = peak annotation + streams bars appear
-   * 3 = full chart with all annotations
+   * -1 = axes only (before scroll)
+   *  0 = axes only
+   *  1 = line appears (with gap indicators if re-entries)
+   *  2 = peak annotation + axis zoom into peak region
+   *  3 = streams bars + zoom back out
    */
   beat: number;
 };
 
-export default function ChartRiseScrolly({ data, peakRank, beat }: Props) {
+const GAP_THRESHOLD_MS = 10 * 24 * 60 * 60 * 1000;
+const OFF_CHART_RANK = 210;
+
+export default function ChartRiseScrolly({ data, peakRank, chartRunInfo, beat }: Props) {
   const svgRef = useRef<SVGSVGElement>(null);
+  const drawnRef = useRef(false);
+  const prevBeatRef = useRef(-2);
+
+  const stateRef = useRef<{
+    x: d3.ScaleTime<number, number>;
+    y: d3.ScaleLinear<number, number>;
+    yStreams: d3.ScaleLinear<number, number>;
+    xFull: [Date, Date];
+    yFull: [number, number];
+    xZoomed: [Date, Date];
+    yZoomed: [number, number];
+    w: number;
+    h: number;
+    sorted: DataPoint[];
+    parseDate: (s: string) => Date | null;
+  } | null>(null);
+
+  const { runs, hasReentries } = useMemo(() => {
+    const sorted = [...data].sort((a, b) => a.week.localeCompare(b.week));
+    if (sorted.length < 2) return { runs: [sorted], hasReentries: false };
+
+    const segments: DataPoint[][] = [];
+    let current: DataPoint[] = [sorted[0]];
+
+    for (let i = 1; i < sorted.length; i++) {
+      const prev = new Date(sorted[i - 1].week + "T00:00:00").getTime();
+      const curr = new Date(sorted[i].week + "T00:00:00").getTime();
+      if (curr - prev > GAP_THRESHOLD_MS) {
+        segments.push(current);
+        current = [];
+      }
+      current.push(sorted[i]);
+    }
+    segments.push(current);
+
+    return { runs: segments, hasReentries: segments.length > 1 };
+  }, [data]);
 
   useEffect(() => {
     if (!svgRef.current || !data.length) return;
     const svg = d3.select(svgRef.current);
-    svg.selectAll("*").remove();
+    const isFirstDraw = !drawnRef.current;
+    const prevBeat = prevBeatRef.current;
+    prevBeatRef.current = beat;
 
-    const container = svgRef.current.parentElement!;
-    const width = container.clientWidth;
-    const height = 380;
-    svg.attr("width", width).attr("height", height);
+    if (isFirstDraw) {
+      drawnRef.current = true;
+      svg.selectAll("*").remove();
 
-    const margin = { top: 20, right: 30, bottom: 50, left: 50 };
-    const w = width - margin.left - margin.right;
-    const h = height - margin.top - margin.bottom;
-    const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+      const container = svgRef.current.parentElement!;
+      const width = container.clientWidth;
+      const height = 400;
+      svg.attr("width", width).attr("height", height);
 
-    const parseDate = d3.timeParse("%Y-%m-%d");
-    const sorted = [...data].sort((a, b) => a.week.localeCompare(b.week));
-    const dates = sorted.map((d) => parseDate(d.week)!);
+      const margin = { top: 24, right: 60, bottom: 52, left: 56 };
+      const w = width - margin.left - margin.right;
+      const h = height - margin.top - margin.bottom;
+      const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
 
-    const x = d3.scaleTime().domain(d3.extent(dates) as [Date, Date]).range([0, w]);
-    const y = d3.scaleLinear().domain([200, 1]).range([h, 0]);
-    const maxStreams = d3.max(sorted, (d) => d.streams || 0) || 1;
-    const yStreams = d3.scaleLinear().domain([0, maxStreams]).range([h, h * 0.5]);
+      svg.append("defs").append("clipPath").attr("id", "rise-clip")
+        .append("rect").attr("x", -2).attr("y", -2).attr("width", w + 4).attr("height", h + 4);
 
-    // Grid lines
-    [1, 10, 50, 100, 200].forEach((tick) => {
-      g.append("line")
-        .attr("x1", 0).attr("x2", w)
-        .attr("y1", y(tick)).attr("y2", y(tick))
-        .attr("stroke", "#f3f4f6").attr("stroke-dasharray", "3,3");
-    });
+      const parseDate = d3.timeParse("%Y-%m-%d");
+      const sorted = [...data].sort((a, b) => a.week.localeCompare(b.week));
+      const dates = sorted.map((d) => parseDate(d.week)!);
+      const xExtent = d3.extent(dates) as [Date, Date];
 
-    // Rank tier labels
-    [
-      { rank: 1, label: "#1" }, { rank: 10, label: "Top 10" },
-      { rank: 50, label: "Top 50" }, { rank: 100, label: "Top 100" },
-    ].forEach(({ rank, label }) => {
+      const yMax = hasReentries ? OFF_CHART_RANK : 200;
+      const x = d3.scaleTime().domain(xExtent).range([0, w]);
+      const y = d3.scaleLinear().domain([yMax, 1]).range([h, 0]);
+      const maxStreams = d3.max(sorted, (d) => d.streams || 0) || 1;
+      const yStreams = d3.scaleLinear().domain([0, maxStreams]).range([h, h * 0.5]);
+
+      // Compute zoom domains around peak
+      const peakPoint = sorted.reduce((best, d) => d.rank < best.rank ? d : best);
+      const peakDate = parseDate(peakPoint.week)!;
+      const peakIdx = sorted.findIndex((d) => d.week === peakPoint.week);
+
+      const zoomPadWeeks = Math.max(5, Math.ceil(sorted.length * 0.15));
+      const zoomStartIdx = Math.max(0, peakIdx - zoomPadWeeks);
+      const zoomEndIdx = Math.min(sorted.length - 1, peakIdx + zoomPadWeeks);
+      const xZoomStart = parseDate(sorted[zoomStartIdx].week)!;
+      const xZoomEnd = parseDate(sorted[zoomEndIdx].week)!;
+
+      const yZoomBottom = Math.min(yMax, peakRank + Math.max(30, Math.round(peakRank * 0.5)));
+      const yZoomTop = Math.max(1, peakRank - Math.max(5, Math.round(peakRank * 0.15)));
+
+      stateRef.current = {
+        x, y, yStreams, w, h, sorted, parseDate,
+        xFull: xExtent,
+        yFull: [yMax, 1],
+        xZoomed: [xZoomStart, xZoomEnd],
+        yZoomed: [yZoomBottom, yZoomTop],
+      };
+
+      // X axis
+      g.append("g")
+        .attr("class", "x-axis")
+        .attr("transform", `translate(0,${h})`)
+        .call(d3.axisBottom(x).ticks(6).tickFormat(d3.timeFormat("%b '%y") as (d: Date | d3.NumberValue) => string))
+        .call((sel) => sel.select(".domain").attr("stroke", "#3f3f46"))
+        .call((sel) => sel.selectAll(".tick line").attr("stroke", "#3f3f46"))
+        .call((sel) => sel.selectAll(".tick text").attr("fill", "#9CA3AF").attr("font-size", 13));
+
+      // Y axis
+      g.append("g")
+        .attr("class", "y-axis")
+        .call(d3.axisLeft(y).tickValues([1, 10, 50, 100, 200]).tickFormat((d) => `#${d}`))
+        .call((sel) => sel.select(".domain").attr("stroke", "#3f3f46"))
+        .call((sel) => sel.selectAll(".tick line").attr("stroke", "#3f3f46"))
+        .call((sel) => sel.selectAll(".tick text").attr("fill", "#9CA3AF").attr("font-size", 13));
+
       g.append("text")
-        .attr("x", w + 4).attr("y", y(rank))
-        .attr("dy", "0.35em").attr("font-size", 8).attr("fill", "#d1d5db")
-        .text(label);
-    });
+        .attr("transform", "rotate(-90)")
+        .attr("x", -h / 2).attr("y", -40)
+        .attr("text-anchor", "middle").attr("font-size", 13).attr("fill", "#71717a")
+        .text("Chart Rank");
 
-    // X axis
-    g.append("g")
-      .attr("transform", `translate(0,${h})`)
-      .call(d3.axisBottom(x).ticks(6))
-      .call((g) => g.select(".domain").attr("stroke", "#e5e7eb"))
-      .call((g) => g.selectAll(".tick line").attr("stroke", "#e5e7eb"))
-      .call((g) => g.selectAll(".tick text").attr("fill", "#9ca3af").attr("font-size", 10));
+      // Grid lines
+      g.append("g").attr("class", "grid-lines");
+      [1, 10, 50, 100, 200].forEach((tick) => {
+        g.select(".grid-lines").append("line")
+          .attr("class", "grid-line")
+          .attr("x1", 0).attr("x2", w)
+          .attr("y1", y(tick)).attr("y2", y(tick))
+          .attr("stroke", "#27272a").attr("stroke-dasharray", "3,3")
+          .attr("data-rank", tick);
+      });
 
-    // Y axis
-    g.append("g")
-      .call(d3.axisLeft(y).tickValues([1, 10, 50, 100, 200]))
-      .call((g) => g.select(".domain").attr("stroke", "#e5e7eb"))
-      .call((g) => g.selectAll(".tick line").attr("stroke", "#e5e7eb"))
-      .call((g) => g.selectAll(".tick text").attr("fill", "#9ca3af").attr("font-size", 10));
+      // Tier labels (right side)
+      [
+        { rank: 1, label: "#1" }, { rank: 10, label: "Top 10" },
+        { rank: 50, label: "Top 50" }, { rank: 100, label: "Top 100" },
+      ].forEach(({ rank, label }) => {
+        g.append("text")
+          .attr("class", "tier-label")
+          .attr("x", w + 8).attr("y", y(rank))
+          .attr("dy", "0.35em").attr("font-size", 12).attr("fill", "#52525b")
+          .attr("data-rank", rank)
+          .text(label);
+      });
 
-    g.append("text")
-      .attr("transform", "rotate(-90)")
-      .attr("x", -h / 2).attr("y", -35)
-      .attr("text-anchor", "middle").attr("font-size", 11).attr("fill", "#9ca3af")
-      .text("Chart Rank");
+      // Data group (clipped)
+      const dataG = g.append("g").attr("class", "data-group").attr("clip-path", "url(#rise-clip)");
 
-    if (beat < 1) return; // Beat 0: just axes
+      // Gap indicators
+      if (hasReentries) {
+        for (let i = 0; i < runs.length - 1; i++) {
+          const prevRun = runs[i];
+          const nextRun = runs[i + 1];
+          const lastPt = prevRun[prevRun.length - 1];
+          const firstPt = nextRun[0];
+          const x1 = x(parseDate(lastPt.week)!);
+          const x2 = x(parseDate(firstPt.week)!);
+          const gapW = x2 - x1;
 
-    // Beat 1+: Draw area + line
-    const area = d3.area<(typeof sorted)[0]>()
-      .x((d) => x(parseDate(d.week)!))
-      .y0(h).y1((d) => y(d.rank))
-      .curve(d3.curveMonotoneX);
+          dataG.append("rect").attr("class", "gap-band")
+            .attr("x", x1).attr("y", 0).attr("width", gapW).attr("height", h)
+            .attr("fill", "#FEE2E2").attr("opacity", 0)
+            .attr("data-week1", lastPt.week).attr("data-week2", firstPt.week);
 
-    g.append("path").datum(sorted).attr("d", area)
-      .attr("fill", "#2563EB").attr("opacity", 0.06);
+          const ld = [
+            { px: x1, py: y(lastPt.rank) },
+            { px: x1 + gapW * 0.15, py: y(OFF_CHART_RANK) },
+            { px: x2 - gapW * 0.15, py: y(OFF_CHART_RANK) },
+            { px: x2, py: y(firstPt.rank) },
+          ];
+          dataG.append("path").attr("class", "gap-connector")
+            .attr("d", d3.line<typeof ld[0]>().x((d) => d.px).y((d) => d.py).curve(d3.curveBasis)(ld)!)
+            .attr("fill", "none").attr("stroke", "#EF4444").attr("stroke-width", 1.5).attr("stroke-dasharray", "4,4").attr("opacity", 0)
+            .attr("data-week1", lastPt.week).attr("data-week2", firstPt.week)
+            .attr("data-rank1", lastPt.rank).attr("data-rank2", firstPt.rank);
 
-    const line = d3.line<(typeof sorted)[0]>()
-      .x((d) => x(parseDate(d.week)!))
-      .y((d) => y(d.rank))
-      .curve(d3.curveMonotoneX);
+          dataG.append("text").attr("class", "gap-label")
+            .attr("x", (x1 + x2) / 2).attr("y", y(OFF_CHART_RANK) + 16)
+            .attr("text-anchor", "middle").attr("font-size", 12).attr("fill", "#EF4444").attr("font-weight", 500).attr("opacity", 0)
+            .attr("data-week1", lastPt.week).attr("data-week2", firstPt.week)
+            .text("Off chart");
 
-    const path = g.append("path").datum(sorted).attr("d", line)
-      .attr("fill", "none").attr("stroke", "#2563EB").attr("stroke-width", 2.5);
+          dataG.append("circle").attr("class", "reentry-dot")
+            .attr("cx", x2).attr("cy", y(firstPt.rank))
+            .attr("r", 5).attr("fill", "#EF4444").attr("stroke", "#181818").attr("stroke-width", 2).attr("opacity", 0)
+            .attr("data-week", firstPt.week).attr("data-rank", firstPt.rank);
 
-    // Animate line drawing
-    const totalLength = path.node()?.getTotalLength() || 0;
-    path.attr("stroke-dasharray", `${totalLength} ${totalLength}`)
-      .attr("stroke-dashoffset", totalLength)
-      .transition().duration(1200).ease(d3.easeCubicOut)
-      .attr("stroke-dashoffset", 0);
+          if (i === 0) {
+            dataG.append("text").attr("class", "reentry-label")
+              .attr("x", x2 + 10).attr("y", y(firstPt.rank) - 6)
+              .attr("font-size", 12).attr("fill", "#EF4444").attr("font-weight", 600).attr("opacity", 0)
+              .attr("data-week", firstPt.week).attr("data-rank", firstPt.rank)
+              .text("Re-entry");
+          }
+        }
+      }
 
-    if (beat < 2) return; // Beat 1: just the line
+      // Line and area per run
+      const areaGen = d3.area<DataPoint>()
+        .x((d) => x(parseDate(d.week)!)).y0(h).y1((d) => y(d.rank)).curve(d3.curveMonotoneX);
+      const lineGen = d3.line<DataPoint>()
+        .x((d) => x(parseDate(d.week)!)).y((d) => y(d.rank)).curve(d3.curveMonotoneX);
 
-    // Beat 2+: Peak annotation
-    const peakPoint = sorted.reduce((best, d) => d.rank < best.rank ? d : best);
-    const peakDate = parseDate(peakPoint.week)!;
+      runs.forEach((run, ri) => {
+        dataG.append("path").datum(run).attr("d", areaGen)
+          .attr("class", "rise-area").attr("data-run", ri)
+          .attr("fill", "#1DB954").attr("opacity", 0);
+        const path = dataG.append("path").datum(run).attr("d", lineGen)
+          .attr("class", "rise-line").attr("data-run", ri)
+          .attr("fill", "none").attr("stroke", "#1DB954").attr("stroke-width", 2.5).attr("opacity", 0);
+        path.attr("data-total-length", path.node()?.getTotalLength() || 0);
+      });
 
-    g.append("circle")
-      .attr("cx", x(peakDate)).attr("cy", y(peakPoint.rank))
-      .attr("r", 0).attr("fill", "#2563EB").attr("stroke", "white").attr("stroke-width", 2)
-      .transition().delay(800).duration(400)
-      .attr("r", 6);
+      // Peak annotation
+      const peakX = x(peakDate);
+      const peakY = y(peakPoint.rank);
+      dataG.append("circle").attr("class", "rise-peak-dot")
+        .attr("cx", peakX).attr("cy", peakY)
+        .attr("r", 7).attr("fill", "#1DB954").attr("stroke", "#181818").attr("stroke-width", 2.5).attr("opacity", 0);
+      dataG.append("text").attr("class", "rise-peak-label")
+        .attr("x", peakX).attr("y", peakY - 18)
+        .attr("text-anchor", "middle").attr("font-size", 15).attr("font-weight", 700).attr("fill", "#1DB954").attr("opacity", 0)
+        .text(`Peak: #${peakPoint.rank}`);
 
-    g.append("text")
-      .attr("x", x(peakDate)).attr("y", y(peakPoint.rank) - 14)
-      .attr("text-anchor", "middle").attr("font-size", 12).attr("font-weight", 700).attr("fill", "#2563EB")
-      .attr("opacity", 0)
-      .transition().delay(900).duration(300)
-      .attr("opacity", 1)
-      .text(`Peak: #${peakPoint.rank}`);
+      // Streams bars
+      const hasStreams = sorted.some((d) => d.streams && d.streams > 0);
+      if (hasStreams) {
+        const barWidth = Math.max(2, w / sorted.length - 1);
+        dataG.selectAll(".stream-bar")
+          .data(sorted.filter((d) => d.streams && d.streams > 0))
+          .join("rect").attr("class", "stream-bar")
+          .attr("x", (d) => x(parseDate(d.week)!) - barWidth / 2)
+          .attr("y", (d) => yStreams(d.streams!))
+          .attr("width", barWidth)
+          .attr("height", (d) => h - yStreams(d.streams!))
+          .attr("fill", "#F59E0B").attr("opacity", 0);
 
-    if (beat < 3) return; // Beat 2: line + peak
-
-    // Beat 3: Streams bars overlay
-    const hasStreams = sorted.some((d) => d.streams && d.streams > 0);
-    if (hasStreams) {
-      const barWidth = Math.max(2, w / sorted.length - 1);
-
-      g.selectAll(".stream-bar")
-        .data(sorted.filter((d) => d.streams && d.streams > 0))
-        .join("rect")
-        .attr("x", (d) => x(parseDate(d.week)!) - barWidth / 2)
-        .attr("y", h)
-        .attr("width", barWidth)
-        .attr("height", 0)
-        .attr("fill", "#F59E0B")
-        .attr("opacity", 0.4)
-        .transition().duration(600).delay((_, i) => i * 15)
-        .attr("y", (d) => yStreams(d.streams!))
-        .attr("height", (d) => h - yStreams(d.streams!));
-
-      // Streams axis label
-      g.append("text")
-        .attr("x", w).attr("y", h + 38)
-        .attr("text-anchor", "end").attr("font-size", 9).attr("fill", "#F59E0B")
-        .attr("opacity", 0)
-        .transition().delay(400).duration(300).attr("opacity", 1)
-        .text("Weekly streams ▲");
+        g.append("text").attr("class", "stream-label")
+          .attr("x", w).attr("y", h + 40)
+          .attr("text-anchor", "end").attr("font-size", 12).attr("fill", "#F59E0B").attr("opacity", 0)
+          .text("Weekly streams \u25B2");
+      }
     }
-  }, [data, beat, peakRank]);
+
+    // --- Update visibility & axis-based zoom ---
+    const g = svg.select("g");
+    const dataG = g.select(".data-group");
+    const shouldAnimate = beat > prevBeat;
+    const state = stateRef.current;
+
+    if (state) {
+      const { x, y, w, h, sorted, parseDate: pd } = state;
+      const dur = 700;
+
+      const xDomain: [Date, Date] = beat === 2 ? state.xZoomed : state.xFull;
+      const yDomain: [number, number] = beat === 2 ? state.yZoomed : state.yFull;
+      const doTransition = shouldAnimate && ((beat === 2 && prevBeat < 2) || (beat !== 2 && prevBeat === 2));
+
+      x.domain(xDomain);
+      y.domain(yDomain);
+
+      const areaGen = d3.area<DataPoint>()
+        .x((d) => x(pd(d.week)!)).y0(h).y1((d) => y(d.rank)).curve(d3.curveMonotoneX);
+      const lineGen = d3.line<DataPoint>()
+        .x((d) => x(pd(d.week)!)).y((d) => y(d.rank)).curve(d3.curveMonotoneX);
+
+      // Axes
+      const xAxis = d3.axisBottom(x).ticks(6).tickFormat(d3.timeFormat("%b '%y") as (d: Date | d3.NumberValue) => string);
+      const yTickVals = beat === 2
+        ? [yDomain[1], Math.round((yDomain[0] + yDomain[1]) / 2), yDomain[0]].filter((v, i, a) => a.indexOf(v) === i)
+        : [1, 10, 50, 100, 200];
+      const yAxis = d3.axisLeft(y).tickValues(yTickVals).tickFormat((d) => `#${d}`);
+
+      const applyAxisStyle = (sel: d3.Selection<SVGGElement, unknown, null, undefined>) => {
+        sel.selectAll(".tick text").attr("fill", "#9CA3AF").attr("font-size", 13);
+        sel.select(".domain").attr("stroke", "#3f3f46");
+        sel.selectAll(".tick line").attr("stroke", "#3f3f46");
+      };
+
+      if (doTransition) {
+        g.select<SVGGElement>(".x-axis").transition().duration(dur).call(xAxis).on("end", function () { applyAxisStyle(d3.select(this)); });
+        g.select<SVGGElement>(".y-axis").transition().duration(dur).call(yAxis).on("end", function () { applyAxisStyle(d3.select(this)); });
+      } else {
+        g.select<SVGGElement>(".x-axis").call(xAxis); applyAxisStyle(g.select<SVGGElement>(".x-axis"));
+        g.select<SVGGElement>(".y-axis").call(yAxis); applyAxisStyle(g.select<SVGGElement>(".y-axis"));
+      }
+
+      // Grid + tier labels
+      g.selectAll<SVGLineElement, unknown>(".grid-line").each(function () {
+        const el = d3.select(this);
+        const rank = parseInt(el.attr("data-rank") || "0");
+        const ny = y(rank);
+        if (doTransition) el.transition().duration(dur).attr("y1", ny).attr("y2", ny);
+        else el.attr("y1", ny).attr("y2", ny);
+      });
+      g.selectAll<SVGTextElement, unknown>(".tier-label").each(function () {
+        const el = d3.select(this);
+        const rank = parseInt(el.attr("data-rank") || "0");
+        if (doTransition) el.transition().duration(dur).attr("y", y(rank));
+        else el.attr("y", y(rank));
+      });
+
+      // Paths
+      if (doTransition) {
+        dataG.selectAll<SVGPathElement, DataPoint[]>(".rise-area").transition().duration(dur).attr("d", areaGen as unknown as string);
+        dataG.selectAll<SVGPathElement, DataPoint[]>(".rise-line").transition().duration(dur).attr("d", lineGen as unknown as string);
+      } else {
+        dataG.selectAll<SVGPathElement, DataPoint[]>(".rise-area").attr("d", areaGen as unknown as string);
+        dataG.selectAll<SVGPathElement, DataPoint[]>(".rise-line").attr("d", lineGen as unknown as string);
+      }
+
+      // Peak position
+      const peakPoint = sorted.reduce((best, d) => d.rank < best.rank ? d : best);
+      const npx = x(pd(peakPoint.week)!);
+      const npy = y(peakPoint.rank);
+      if (doTransition) {
+        dataG.select(".rise-peak-dot").transition().duration(dur).attr("cx", npx).attr("cy", npy);
+        dataG.select(".rise-peak-label").transition().duration(dur).attr("x", npx).attr("y", npy - 18);
+      } else {
+        dataG.select(".rise-peak-dot").attr("cx", npx).attr("cy", npy);
+        dataG.select(".rise-peak-label").attr("x", npx).attr("y", npy - 18);
+      }
+
+      // Stream bars
+      const barWidth = Math.max(2, w / sorted.length - 1);
+      const sb = dataG.selectAll<SVGRectElement, DataPoint>(".stream-bar");
+      if (doTransition) sb.transition().duration(dur).attr("x", (d) => x(pd(d.week)!) - barWidth / 2).attr("width", barWidth);
+      else sb.attr("x", (d) => x(pd(d.week)!) - barWidth / 2).attr("width", barWidth);
+
+      // Gap indicators
+      if (hasReentries) {
+        dataG.selectAll<SVGRectElement, unknown>(".gap-band").each(function () {
+          const el = d3.select(this);
+          const nx1 = x(pd(el.attr("data-week1")!)!);
+          const nx2 = x(pd(el.attr("data-week2")!)!);
+          if (doTransition) el.transition().duration(dur).attr("x", nx1).attr("width", nx2 - nx1);
+          else el.attr("x", nx1).attr("width", nx2 - nx1);
+        });
+        dataG.selectAll<SVGPathElement, unknown>(".gap-connector").each(function () {
+          const el = d3.select(this);
+          const nx1 = x(pd(el.attr("data-week1")!)!);
+          const nx2 = x(pd(el.attr("data-week2")!)!);
+          const r1 = parseInt(el.attr("data-rank1")!);
+          const r2 = parseInt(el.attr("data-rank2")!);
+          const gw = nx2 - nx1;
+          const ld = [
+            { px: nx1, py: y(r1) }, { px: nx1 + gw * 0.15, py: y(OFF_CHART_RANK) },
+            { px: nx2 - gw * 0.15, py: y(OFF_CHART_RANK) }, { px: nx2, py: y(r2) },
+          ];
+          const np = d3.line<typeof ld[0]>().x((d) => d.px).y((d) => d.py).curve(d3.curveBasis)(ld)!;
+          if (doTransition) el.transition().duration(dur).attr("d", np);
+          else el.attr("d", np);
+        });
+        dataG.selectAll<SVGTextElement, unknown>(".gap-label").each(function () {
+          const el = d3.select(this);
+          const nx1 = x(pd(el.attr("data-week1")!)!);
+          const nx2 = x(pd(el.attr("data-week2")!)!);
+          if (doTransition) el.transition().duration(dur).attr("x", (nx1 + nx2) / 2).attr("y", y(OFF_CHART_RANK) + 16);
+          else el.attr("x", (nx1 + nx2) / 2).attr("y", y(OFF_CHART_RANK) + 16);
+        });
+        dataG.selectAll<SVGCircleElement, unknown>(".reentry-dot").each(function () {
+          const el = d3.select(this);
+          if (doTransition) el.transition().duration(dur).attr("cx", x(pd(el.attr("data-week")!)!)).attr("cy", y(parseInt(el.attr("data-rank")!)));
+          else el.attr("cx", x(pd(el.attr("data-week")!)!)).attr("cy", y(parseInt(el.attr("data-rank")!)));
+        });
+        dataG.selectAll<SVGTextElement, unknown>(".reentry-label").each(function () {
+          const el = d3.select(this);
+          if (doTransition) el.transition().duration(dur).attr("x", x(pd(el.attr("data-week")!)!) + 10).attr("y", y(parseInt(el.attr("data-rank")!)) - 6);
+          else el.attr("x", x(pd(el.attr("data-week")!)!) + 10).attr("y", y(parseInt(el.attr("data-rank")!)) - 6);
+        });
+      }
+    }
+
+    // Visibility
+    if (beat >= 1) {
+      dataG.selectAll<SVGPathElement, DataPoint[]>(".rise-area").each(function () {
+        const el = d3.select(this);
+        if (shouldAnimate && prevBeat < 1) el.transition().duration(400).attr("opacity", 0.06);
+        else el.attr("opacity", 0.06);
+      });
+      dataG.selectAll<SVGPathElement, DataPoint[]>(".rise-line").each(function () {
+        const el = d3.select(this);
+        if (shouldAnimate && prevBeat < 1) {
+          const tl = parseFloat(el.attr("data-total-length") || "0");
+          const ri2 = parseInt(el.attr("data-run") || "0");
+          el.attr("opacity", 1).attr("stroke-dasharray", `${tl} ${tl}`).attr("stroke-dashoffset", tl)
+            .transition().duration(1000).delay(ri2 * 300).ease(d3.easeCubicOut).attr("stroke-dashoffset", 0);
+        } else {
+          el.attr("opacity", 1).attr("stroke-dasharray", "none");
+        }
+      });
+      if (hasReentries) {
+        if (shouldAnimate && prevBeat < 1) {
+          dataG.selectAll(".gap-band").transition().delay(400).duration(400).attr("opacity", 0.3);
+          dataG.selectAll(".gap-connector").transition().delay(500).duration(400).attr("opacity", 0.6);
+          dataG.selectAll(".gap-label").transition().delay(600).duration(300).attr("opacity", 0.8);
+          dataG.selectAll(".reentry-dot").transition().delay(700).duration(300).attr("opacity", 1);
+          dataG.selectAll(".reentry-label").transition().delay(800).duration(300).attr("opacity", 1);
+        } else {
+          dataG.selectAll(".gap-band").attr("opacity", 0.3);
+          dataG.selectAll(".gap-connector").attr("opacity", 0.6);
+          dataG.selectAll(".gap-label").attr("opacity", 0.8);
+          dataG.selectAll(".reentry-dot").attr("opacity", 1);
+          dataG.selectAll(".reentry-label").attr("opacity", 1);
+        }
+      }
+    } else {
+      dataG.selectAll(".rise-area, .rise-line, .gap-band, .gap-connector, .gap-label, .reentry-dot, .reentry-label").attr("opacity", 0);
+    }
+
+    if (beat >= 2) {
+      if (shouldAnimate && prevBeat < 2) {
+        dataG.select(".rise-peak-dot").attr("r", 0).attr("opacity", 1).transition().duration(400).attr("r", 7);
+        dataG.select(".rise-peak-label").attr("opacity", 0).transition().delay(200).duration(300).attr("opacity", 1);
+      } else {
+        dataG.select(".rise-peak-dot").attr("r", 7).attr("opacity", 1);
+        dataG.select(".rise-peak-label").attr("opacity", 1);
+      }
+    } else {
+      dataG.select(".rise-peak-dot").attr("opacity", 0);
+      dataG.select(".rise-peak-label").attr("opacity", 0);
+    }
+
+    if (beat >= 3) {
+      if (shouldAnimate && prevBeat < 3) {
+        dataG.selectAll(".stream-bar").attr("opacity", 0).transition().duration(400).delay((_, i) => i * 10).attr("opacity", 0.4);
+        g.select(".stream-label").attr("opacity", 0).transition().delay(300).duration(300).attr("opacity", 1);
+      } else {
+        dataG.selectAll(".stream-bar").attr("opacity", 0.4);
+        g.select(".stream-label").attr("opacity", 1);
+      }
+    } else {
+      dataG.selectAll(".stream-bar").attr("opacity", 0);
+      g.select(".stream-label").attr("opacity", 0);
+    }
+  }, [data, beat, peakRank, runs, hasReentries]);
+
+  useEffect(() => {
+    drawnRef.current = false;
+    prevBeatRef.current = -2;
+    stateRef.current = null;
+  }, [data, peakRank]);
 
   return (
-    <div className="rounded-2xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
+    <div className="rounded-2xl border border-zinc-800 bg-[#181818] p-4">
       <svg ref={svgRef} className="w-full" />
+      {hasReentries && beat >= 1 && (
+        <p className="mt-2 text-center text-xs text-muted">
+          <span className="inline-flex items-center gap-1.5">
+            <span className="inline-block h-2 w-2 rounded-full bg-red-500" />
+            Re-entry points
+          </span>
+          <span className="mx-2">{"\u00B7"}</span>
+          <span className="text-red-400">Dashed = off chart</span>
+          <span className="mx-2">{"\u00B7"}</span>
+          {chartRunInfo ? `${chartRunInfo.totalRuns} chart runs` : `${runs.length} chart runs`}
+        </p>
+      )}
     </div>
   );
 }

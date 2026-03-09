@@ -14,14 +14,14 @@ export default function Header() {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
-    <header className="sticky top-0 z-50 border-b border-zinc-200 bg-white/80 backdrop-blur-md dark:border-zinc-800 dark:bg-zinc-950/80">
+    <header className="sticky top-0 z-50 border-b border-zinc-800 bg-[#121212]/90 backdrop-blur-md">
       <div className="mx-auto flex max-w-page items-center justify-between px-6 py-4">
         {/* Logo */}
         <Link href="/" className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-sm font-bold text-white">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-sm font-bold text-black">
             CP
           </div>
-          <span className="text-lg font-semibold tracking-tight">
+          <span className="text-lg font-semibold tracking-tight text-white">
             ChartPulse
           </span>
         </Link>
@@ -30,7 +30,7 @@ export default function Header() {
         <nav className="hidden items-center gap-8 md:flex">
           <Link
             href="/"
-            className="text-sm font-medium text-zinc-600 transition-colors hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+            className="text-sm font-medium text-zinc-400 transition-colors hover:text-white"
           >
             Home
           </Link>
@@ -41,7 +41,7 @@ export default function Header() {
             onMouseEnter={() => setExploreOpen(true)}
             onMouseLeave={() => setExploreOpen(false)}
           >
-            <button className="flex items-center gap-1 text-sm font-medium text-zinc-600 transition-colors hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100">
+            <button className="flex items-center gap-1 text-sm font-medium text-zinc-400 transition-colors hover:text-white">
               Explore
               <svg
                 className={`h-3.5 w-3.5 transition-transform ${exploreOpen ? "rotate-180" : ""}`}
@@ -60,12 +60,12 @@ export default function Header() {
 
             {exploreOpen && (
               <div className="absolute left-1/2 top-full -translate-x-1/2 pt-2">
-                <div className="w-56 rounded-xl border border-zinc-200 bg-white p-2 shadow-lg dark:border-zinc-700 dark:bg-zinc-900">
+                <div className="w-56 rounded-xl border border-zinc-700 bg-[#282828] p-2 shadow-lg">
                   {exploreLinks.map((link) => (
                     <Link
                       key={link.href}
                       href={link.href}
-                      className="block rounded-lg px-3 py-2 text-sm text-zinc-700 transition-colors hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                      className="block rounded-lg px-3 py-2 text-sm text-zinc-300 transition-colors hover:bg-zinc-700"
                     >
                       {link.label}
                     </Link>
@@ -77,7 +77,7 @@ export default function Header() {
 
           <Link
             href="/legacy/billboard"
-            className="text-sm font-medium text-zinc-400 transition-colors hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-zinc-300"
+            className="text-sm font-medium text-zinc-500 transition-colors hover:text-zinc-300"
           >
             Legacy
           </Link>
@@ -115,11 +115,11 @@ export default function Header() {
 
       {/* Mobile menu */}
       {mobileOpen && (
-        <div className="border-t border-zinc-200 px-6 py-4 md:hidden dark:border-zinc-800">
+        <div className="border-t border-zinc-800 px-6 py-4 md:hidden">
           <nav className="flex flex-col gap-3">
             <Link
               href="/"
-              className="text-sm font-medium text-zinc-700 dark:text-zinc-300"
+              className="text-sm font-medium text-zinc-300"
               onClick={() => setMobileOpen(false)}
             >
               Home
@@ -128,7 +128,7 @@ export default function Header() {
               <Link
                 key={link.href}
                 href={link.href}
-                className="pl-3 text-sm text-zinc-600 dark:text-zinc-400"
+                className="pl-3 text-sm text-zinc-400"
                 onClick={() => setMobileOpen(false)}
               >
                 {link.label}
@@ -136,7 +136,7 @@ export default function Header() {
             ))}
             <Link
               href="/legacy/billboard"
-              className="text-sm text-zinc-400 dark:text-zinc-500"
+              className="text-sm text-zinc-500"
               onClick={() => setMobileOpen(false)}
             >
               Legacy
