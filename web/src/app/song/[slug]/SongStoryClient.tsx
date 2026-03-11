@@ -258,7 +258,7 @@ export default function SongStoryClient({ trackName, chapters, outro, songData, 
                 Anatomy of a Song
               </Link>
               <Link href="/explore/genre-pulse" className="rounded-lg bg-surface-hover px-4 py-2 text-sm transition-colors hover:bg-zinc-700">
-                Genre Pulse
+                Genre Breakdown
               </Link>
             </div>
           </div>

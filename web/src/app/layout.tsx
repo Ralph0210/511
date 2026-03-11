@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import { HeaderOverlayProvider } from "@/lib/header-overlay-context";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -26,9 +27,11 @@ export default function RootLayout({
         className="min-h-screen font-sans antialiased"
         suppressHydrationWarning
       >
-        <Header />
-        <main className="min-h-[calc(100vh-140px)]">{children}</main>
-        <Footer />
+        <HeaderOverlayProvider>
+          <Header />
+          <main className="min-h-[calc(100vh-140px)]">{children}</main>
+          <Footer />
+        </HeaderOverlayProvider>
       </body>
     </html>
   );

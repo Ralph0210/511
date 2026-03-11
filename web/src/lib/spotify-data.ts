@@ -56,24 +56,359 @@ export type GenreRow = {
 };
 
 // ---------- Genre classification (shared) ----------
+// Score-based classifier: parses individual tags, scores each against parent
+// genres, and returns the genre with the highest cumulative weight.
 
-const GENRE_RULES: [RegExp, string][] = [
-  [/\bhip\s?hop\b|\brap\b|\btrap\b/i, "Hip Hop/Rap"],
-  [/\blatin\b|\breggaeton\b|\btropical\b/i, "Latin"],
-  [/\br&b\b|\bsoul\b|\brhythm\b/i, "R&B"],
-  [/\brock\b|\bmetal\b|\bpunk\b|\bindie\b/i, "Rock"],
-  [/\bedm\b|\bhouse\b|\bdance\b|\btechno\b|\btrance\b|\bdubstep\b/i, "EDM/Dance"],
-  [/\bcountry\b/i, "Country"],
-  [/\bk-?pop\b/i, "K-Pop"],
-  [/\bpop\b/i, "Pop"],
+type GenreScore = { genre: string; weight: number };
+
+// Tier 1: Exact tag → weighted genre affiliations.
+// Covers the ~200 most frequent tags in the Spotify Top 200 dataset.
+const TAG_MAP = new Map<string, GenreScore[]>([
+  // ── Pop family ──────────────────────────────────────────────
+  ["pop",                   [{ genre: "Pop", weight: 1.0 }]],
+  ["dance pop",             [{ genre: "Pop", weight: 1.0 }, { genre: "EDM/Dance", weight: 0.3 }]],
+  ["post-teen pop",         [{ genre: "Pop", weight: 1.0 }]],
+  ["electropop",            [{ genre: "Pop", weight: 1.0 }, { genre: "EDM/Dance", weight: 0.3 }]],
+  ["uk pop",                [{ genre: "Pop", weight: 1.0 }]],
+  ["canadian pop",          [{ genre: "Pop", weight: 1.0 }]],
+  ["viral pop",             [{ genre: "Pop", weight: 1.0 }]],
+  ["art pop",               [{ genre: "Pop", weight: 1.0 }]],
+  ["indie poptimism",       [{ genre: "Pop", weight: 1.0 }]],
+  ["boy band",              [{ genre: "Pop", weight: 1.0 }]],
+  ["girl group",            [{ genre: "Pop", weight: 1.0 }]],
+  ["europop",               [{ genre: "Pop", weight: 1.0 }]],
+  ["scandipop",             [{ genre: "Pop", weight: 1.0 }]],
+  ["australian pop",        [{ genre: "Pop", weight: 1.0 }]],
+  ["swedish pop",           [{ genre: "Pop", weight: 1.0 }]],
+  ["danish pop",            [{ genre: "Pop", weight: 1.0 }]],
+  ["dutch pop",             [{ genre: "Pop", weight: 1.0 }]],
+  ["norwegian pop",         [{ genre: "Pop", weight: 1.0 }]],
+  ["nz pop",                [{ genre: "Pop", weight: 1.0 }]],
+  ["colombian pop",         [{ genre: "Pop", weight: 0.7 }, { genre: "Latin", weight: 0.5 }]],
+  ["mexican pop",           [{ genre: "Pop", weight: 0.7 }, { genre: "Latin", weight: 0.5 }]],
+  ["puerto rican pop",      [{ genre: "Pop", weight: 0.6 }, { genre: "Latin", weight: 0.6 }]],
+  ["barbadian pop",         [{ genre: "Pop", weight: 1.0 }]],
+  ["panamanian pop",        [{ genre: "Pop", weight: 0.7 }, { genre: "Latin", weight: 0.5 }]],
+  ["pop venezolano",        [{ genre: "Pop", weight: 0.6 }, { genre: "Latin", weight: 0.6 }]],
+  ["pop nacional",          [{ genre: "Pop", weight: 0.7 }, { genre: "Latin", weight: 0.4 }]],
+  ["pop urbaine",           [{ genre: "Pop", weight: 0.8 }, { genre: "Hip Hop/Rap", weight: 0.3 }]],
+  ["pop dance",             [{ genre: "Pop", weight: 0.7 }, { genre: "EDM/Dance", weight: 0.5 }]],
+  ["pop edm",               [{ genre: "Pop", weight: 0.5 }, { genre: "EDM/Dance", weight: 0.7 }]],
+  ["pop house",             [{ genre: "Pop", weight: 0.5 }, { genre: "EDM/Dance", weight: 0.7 }]],
+  ["pop rock",              [{ genre: "Pop", weight: 0.7 }, { genre: "Rock", weight: 0.5 }]],
+  ["pop soul",              [{ genre: "Pop", weight: 0.6 }, { genre: "R&B", weight: 0.6 }]],
+  ["pop r&b",               [{ genre: "Pop", weight: 0.5 }, { genre: "R&B", weight: 0.7 }]],
+  ["pop reggaeton",         [{ genre: "Latin", weight: 0.8 }, { genre: "Pop", weight: 0.4 }]],
+  ["hip pop",               [{ genre: "Pop", weight: 0.5 }, { genre: "Hip Hop/Rap", weight: 0.7 }]],
+  ["indie pop",             [{ genre: "Pop", weight: 1.0 }, { genre: "Rock", weight: 0.2 }]],
+  ["indie pop rap",         [{ genre: "Pop", weight: 0.5 }, { genre: "Hip Hop/Rap", weight: 0.5 }, { genre: "Rock", weight: 0.2 }]],
+  ["bedroom pop",           [{ genre: "Pop", weight: 1.0 }]],
+  ["shimmer pop",           [{ genre: "Pop", weight: 1.0 }]],
+  ["social media pop",      [{ genre: "Pop", weight: 1.0 }]],
+  ["new wave pop",          [{ genre: "Pop", weight: 0.8 }, { genre: "Rock", weight: 0.3 }]],
+  ["synthpop",              [{ genre: "Pop", weight: 0.7 }, { genre: "EDM/Dance", weight: 0.5 }]],
+  ["baroque pop",           [{ genre: "Pop", weight: 1.0 }]],
+  ["chamber pop",           [{ genre: "Pop", weight: 1.0 }]],
+  ["metropopolis",          [{ genre: "Pop", weight: 1.0 }]],
+  ["etherpop",              [{ genre: "Pop", weight: 0.8 }, { genre: "EDM/Dance", weight: 0.3 }]],
+  ["nyc pop",               [{ genre: "Pop", weight: 1.0 }]],
+  ["jazz pop",              [{ genre: "Pop", weight: 0.7 }]],
+  ["funk pop",              [{ genre: "Pop", weight: 0.8 }, { genre: "R&B", weight: 0.3 }]],
+  ["folk-pop",              [{ genre: "Pop", weight: 0.8 }, { genre: "Rock", weight: 0.3 }]],
+  ["neo mellow",            [{ genre: "Pop", weight: 0.8 }]],
+  ["acoustic pop",          [{ genre: "Pop", weight: 1.0 }]],
+  ["talent show",           [{ genre: "Pop", weight: 1.0 }]],
+  ["swedish electropop",    [{ genre: "Pop", weight: 0.7 }, { genre: "EDM/Dance", weight: 0.5 }]],
+  ["chinese electropop",    [{ genre: "Pop", weight: 0.7 }, { genre: "EDM/Dance", weight: 0.3 }]],
+  ["latin viral pop",       [{ genre: "Pop", weight: 0.5 }, { genre: "Latin", weight: 0.7 }]],
+  ["bubblegrunge",          [{ genre: "Pop", weight: 0.6 }, { genre: "Rock", weight: 0.5 }]],
+  ["dream smp",             [{ genre: "Pop", weight: 0.8 }]],
+  ["escape room",           [{ genre: "Pop", weight: 0.7 }, { genre: "EDM/Dance", weight: 0.3 }]],
+
+  // ── Hip Hop/Rap family ──────────────────────────────────────
+  ["hip hop",               [{ genre: "Hip Hop/Rap", weight: 1.0 }]],
+  ["rap",                   [{ genre: "Hip Hop/Rap", weight: 1.0 }]],
+  ["trap",                  [{ genre: "Hip Hop/Rap", weight: 1.0 }]],
+  ["southern hip hop",      [{ genre: "Hip Hop/Rap", weight: 1.0 }]],
+  ["pop rap",               [{ genre: "Hip Hop/Rap", weight: 0.7 }, { genre: "Pop", weight: 0.5 }]],
+  ["melodic rap",           [{ genre: "Hip Hop/Rap", weight: 1.0 }]],
+  ["atl hip hop",           [{ genre: "Hip Hop/Rap", weight: 1.0 }]],
+  ["gangster rap",          [{ genre: "Hip Hop/Rap", weight: 1.0 }]],
+  ["conscious hip hop",     [{ genre: "Hip Hop/Rap", weight: 1.0 }]],
+  ["canadian hip hop",      [{ genre: "Hip Hop/Rap", weight: 1.0 }]],
+  ["toronto rap",           [{ genre: "Hip Hop/Rap", weight: 1.0 }]],
+  ["emo rap",               [{ genre: "Hip Hop/Rap", weight: 1.0 }]],
+  ["viral rap",             [{ genre: "Hip Hop/Rap", weight: 1.0 }]],
+  ["miami hip hop",         [{ genre: "Hip Hop/Rap", weight: 1.0 }]],
+  ["dfw rap",               [{ genre: "Hip Hop/Rap", weight: 1.0 }]],
+  ["chicago rap",           [{ genre: "Hip Hop/Rap", weight: 1.0 }]],
+  ["atl trap",              [{ genre: "Hip Hop/Rap", weight: 1.0 }]],
+  ["west coast rap",        [{ genre: "Hip Hop/Rap", weight: 1.0 }]],
+  ["east coast hip hop",    [{ genre: "Hip Hop/Rap", weight: 1.0 }]],
+  ["north carolina hip hop",[{ genre: "Hip Hop/Rap", weight: 1.0 }]],
+  ["detroit hip hop",       [{ genre: "Hip Hop/Rap", weight: 1.0 }]],
+  ["queens hip hop",        [{ genre: "Hip Hop/Rap", weight: 1.0 }]],
+  ["philly rap",            [{ genre: "Hip Hop/Rap", weight: 1.0 }]],
+  ["ohio hip hop",          [{ genre: "Hip Hop/Rap", weight: 1.0 }]],
+  ["memphis hip hop",       [{ genre: "Hip Hop/Rap", weight: 1.0 }]],
+  ["new orleans rap",       [{ genre: "Hip Hop/Rap", weight: 1.0 }]],
+  ["florida rap",           [{ genre: "Hip Hop/Rap", weight: 1.0 }]],
+  ["kentucky hip hop",      [{ genre: "Hip Hop/Rap", weight: 1.0 }]],
+  ["seattle hip hop",       [{ genre: "Hip Hop/Rap", weight: 1.0 }]],
+  ["oakland hip hop",       [{ genre: "Hip Hop/Rap", weight: 1.0 }]],
+  ["minnesota hip hop",     [{ genre: "Hip Hop/Rap", weight: 1.0 }]],
+  ["mississippi hip hop",   [{ genre: "Hip Hop/Rap", weight: 1.0 }]],
+  ["tennessee hip hop",     [{ genre: "Hip Hop/Rap", weight: 1.0 }]],
+  ["houston rap",           [{ genre: "Hip Hop/Rap", weight: 1.0 }]],
+  ["cali rap",              [{ genre: "Hip Hop/Rap", weight: 1.0 }]],
+  ["nyc rap",               [{ genre: "Hip Hop/Rap", weight: 1.0 }]],
+  ["dmv rap",               [{ genre: "Hip Hop/Rap", weight: 1.0 }]],
+  ["baton rouge rap",       [{ genre: "Hip Hop/Rap", weight: 1.0 }]],
+  ["pittsburgh rap",        [{ genre: "Hip Hop/Rap", weight: 1.0 }]],
+  ["rhode island rap",      [{ genre: "Hip Hop/Rap", weight: 1.0 }]],
+  ["dirty south rap",       [{ genre: "Hip Hop/Rap", weight: 1.0 }]],
+  ["underground hip hop",   [{ genre: "Hip Hop/Rap", weight: 1.0 }]],
+  ["deep underground hip hop", [{ genre: "Hip Hop/Rap", weight: 1.0 }]],
+  ["lgbtq+ hip hop",        [{ genre: "Hip Hop/Rap", weight: 1.0 }]],
+  ["canadian trap",         [{ genre: "Hip Hop/Rap", weight: 1.0 }]],
+  ["brooklyn drill",        [{ genre: "Hip Hop/Rap", weight: 1.0 }]],
+  ["drill",                 [{ genre: "Hip Hop/Rap", weight: 1.0 }]],
+  ["vapor trap",            [{ genre: "Hip Hop/Rap", weight: 1.0 }]],
+  ["pluggnb",               [{ genre: "Hip Hop/Rap", weight: 0.8 }, { genre: "R&B", weight: 0.4 }]],
+  ["plugg",                 [{ genre: "Hip Hop/Rap", weight: 1.0 }]],
+  ["sad rap",               [{ genre: "Hip Hop/Rap", weight: 1.0 }]],
+  ["dark trap",             [{ genre: "Hip Hop/Rap", weight: 1.0 }]],
+  ["trap soul",             [{ genre: "Hip Hop/Rap", weight: 0.6 }, { genre: "R&B", weight: 0.6 }]],
+  ["aesthetic rap",         [{ genre: "Hip Hop/Rap", weight: 1.0 }]],
+  ["meme rap",              [{ genre: "Hip Hop/Rap", weight: 1.0 }]],
+  ["german hip hop",        [{ genre: "Hip Hop/Rap", weight: 1.0 }]],
+  ["french hip hop",        [{ genre: "Hip Hop/Rap", weight: 1.0 }]],
+  ["italian hip hop",       [{ genre: "Hip Hop/Rap", weight: 1.0 }]],
+  ["australian hip hop",    [{ genre: "Hip Hop/Rap", weight: 1.0 }]],
+  ["uk hip hop",            [{ genre: "Hip Hop/Rap", weight: 1.0 }]],
+  ["rap conscient",         [{ genre: "Hip Hop/Rap", weight: 1.0 }]],
+  ["rap latina",            [{ genre: "Hip Hop/Rap", weight: 0.7 }, { genre: "Latin", weight: 0.5 }]],
+  ["rap dominicano",        [{ genre: "Hip Hop/Rap", weight: 0.7 }, { genre: "Latin", weight: 0.5 }]],
+  ["rap marseille",         [{ genre: "Hip Hop/Rap", weight: 1.0 }]],
+  ["canadian old school hip hop", [{ genre: "Hip Hop/Rap", weight: 1.0 }]],
+  ["argentine hip hop",     [{ genre: "Hip Hop/Rap", weight: 0.7 }, { genre: "Latin", weight: 0.5 }]],
+  ["grime",                 [{ genre: "Hip Hop/Rap", weight: 0.8 }]],
+
+  // ── Latin family ────────────────────────────────────────────
+  ["reggaeton",             [{ genre: "Latin", weight: 1.0 }]],
+  ["trap latino",           [{ genre: "Latin", weight: 0.7 }, { genre: "Hip Hop/Rap", weight: 0.5 }]],
+  ["reggaeton colombiano",  [{ genre: "Latin", weight: 1.0 }]],
+  ["reggaeton flow",        [{ genre: "Latin", weight: 1.0 }]],
+  ["latin hip hop",         [{ genre: "Latin", weight: 0.6 }, { genre: "Hip Hop/Rap", weight: 0.6 }]],
+  ["latin pop",             [{ genre: "Latin", weight: 0.7 }, { genre: "Pop", weight: 0.5 }]],
+  ["latin arena pop",       [{ genre: "Latin", weight: 0.6 }, { genre: "Pop", weight: 0.6 }]],
+  ["trap boricua",          [{ genre: "Latin", weight: 0.8 }, { genre: "Hip Hop/Rap", weight: 0.4 }]],
+  ["trap argentino",        [{ genre: "Latin", weight: 0.7 }, { genre: "Hip Hop/Rap", weight: 0.5 }]],
+  ["trap triste",           [{ genre: "Latin", weight: 0.6 }, { genre: "Hip Hop/Rap", weight: 0.5 }]],
+  ["moombahton",            [{ genre: "Latin", weight: 0.7 }, { genre: "EDM/Dance", weight: 0.5 }]],
+  ["bachata",               [{ genre: "Latin", weight: 1.0 }]],
+  ["dembow",                [{ genre: "Latin", weight: 1.0 }]],
+  ["perreo",                [{ genre: "Latin", weight: 1.0 }]],
+  ["cubaton",               [{ genre: "Latin", weight: 1.0 }]],
+  ["champeta",              [{ genre: "Latin", weight: 1.0 }]],
+  ["vallenato",             [{ genre: "Latin", weight: 1.0 }]],
+  ["francoton",             [{ genre: "Latin", weight: 0.8 }]],
+  ["electro latino",        [{ genre: "Latin", weight: 0.6 }, { genre: "EDM/Dance", weight: 0.6 }]],
+  ["r&b en espanol",        [{ genre: "Latin", weight: 0.5 }, { genre: "R&B", weight: 0.7 }]],
+  ["dominican pop",         [{ genre: "Latin", weight: 0.7 }, { genre: "Pop", weight: 0.5 }]],
+  ["dancehall",             [{ genre: "Latin", weight: 0.7 }]],
+  ["reggae fusion",         [{ genre: "Latin", weight: 0.6 }]],
+  ["basshall",              [{ genre: "Latin", weight: 0.6 }, { genre: "EDM/Dance", weight: 0.5 }]],
+  ["funk carioca",          [{ genre: "Latin", weight: 0.8 }]],
+  ["brega funk",            [{ genre: "Latin", weight: 0.7 }]],
+  ["sertanejo",             [{ genre: "Latin", weight: 0.7 }]],
+  ["sertanejo universitario", [{ genre: "Latin", weight: 0.7 }]],
+  ["sertanejo pop",         [{ genre: "Latin", weight: 0.6 }, { genre: "Pop", weight: 0.5 }]],
+  ["pagode baiano",         [{ genre: "Latin", weight: 0.8 }]],
+  ["forro",                 [{ genre: "Latin", weight: 0.8 }]],
+  ["arrocha",               [{ genre: "Latin", weight: 0.8 }]],
+  ["piseiro",               [{ genre: "Latin", weight: 0.8 }]],
+  ["musica mexicana",       [{ genre: "Latin", weight: 1.0 }]],
+  ["norteno",               [{ genre: "Latin", weight: 1.0 }]],
+  ["banda",                 [{ genre: "Latin", weight: 1.0 }]],
+
+  // ── R&B family ──────────────────────────────────────────────
+  ["r&b",                   [{ genre: "R&B", weight: 1.0 }]],
+  ["contemporary r&b",      [{ genre: "R&B", weight: 1.0 }]],
+  ["canadian contemporary r&b", [{ genre: "R&B", weight: 1.0 }]],
+  ["uk contemporary r&b",   [{ genre: "R&B", weight: 1.0 }]],
+  ["urban contemporary",    [{ genre: "R&B", weight: 0.8 }, { genre: "Hip Hop/Rap", weight: 0.3 }]],
+  ["neo soul",              [{ genre: "R&B", weight: 1.0 }]],
+  ["soul",                  [{ genre: "R&B", weight: 1.0 }]],
+  ["british soul",          [{ genre: "R&B", weight: 1.0 }]],
+  ["bedroom soul",          [{ genre: "R&B", weight: 0.8 }]],
+  ["chill r&b",             [{ genre: "R&B", weight: 1.0 }]],
+  ["indie r&b",             [{ genre: "R&B", weight: 0.8 }]],
+  ["alt z",                 [{ genre: "Pop", weight: 0.6 }, { genre: "R&B", weight: 0.4 }]],
+  ["gospel",                [{ genre: "R&B", weight: 0.6 }]],
+
+  // ── EDM/Dance family ───────────────────────────────────────
+  ["edm",                   [{ genre: "EDM/Dance", weight: 1.0 }]],
+  ["house",                 [{ genre: "EDM/Dance", weight: 1.0 }]],
+  ["electro house",         [{ genre: "EDM/Dance", weight: 1.0 }]],
+  ["progressive house",     [{ genre: "EDM/Dance", weight: 1.0 }]],
+  ["progressive electro house", [{ genre: "EDM/Dance", weight: 1.0 }]],
+  ["deep house",            [{ genre: "EDM/Dance", weight: 1.0 }]],
+  ["deep euro house",       [{ genre: "EDM/Dance", weight: 1.0 }]],
+  ["dutch house",           [{ genre: "EDM/Dance", weight: 1.0 }]],
+  ["dutch edm",             [{ genre: "EDM/Dance", weight: 1.0 }]],
+  ["belgian edm",           [{ genre: "EDM/Dance", weight: 1.0 }]],
+  ["brazilian edm",         [{ genre: "EDM/Dance", weight: 1.0 }]],
+  ["tropical house",        [{ genre: "EDM/Dance", weight: 1.0 }]],
+  ["deep tropical house",   [{ genre: "EDM/Dance", weight: 1.0 }]],
+  ["slap house",            [{ genre: "EDM/Dance", weight: 1.0 }]],
+  ["brostep",               [{ genre: "EDM/Dance", weight: 1.0 }]],
+  ["trance",                [{ genre: "EDM/Dance", weight: 1.0 }]],
+  ["uk dance",              [{ genre: "EDM/Dance", weight: 1.0 }]],
+  ["uk funky",              [{ genre: "EDM/Dance", weight: 1.0 }]],
+  ["australian dance",      [{ genre: "EDM/Dance", weight: 1.0 }]],
+  ["german dance",          [{ genre: "EDM/Dance", weight: 1.0 }]],
+  ["german techno",         [{ genre: "EDM/Dance", weight: 1.0 }]],
+  ["italo dance",           [{ genre: "EDM/Dance", weight: 1.0 }]],
+  ["eurodance",             [{ genre: "EDM/Dance", weight: 1.0 }]],
+  ["electronic trap",       [{ genre: "EDM/Dance", weight: 0.7 }, { genre: "Hip Hop/Rap", weight: 0.4 }]],
+  ["electro",               [{ genre: "EDM/Dance", weight: 1.0 }]],
+  ["filter house",          [{ genre: "EDM/Dance", weight: 1.0 }]],
+  ["complextro",            [{ genre: "EDM/Dance", weight: 1.0 }]],
+  ["big room",              [{ genre: "EDM/Dance", weight: 1.0 }]],
+  ["indietronica",          [{ genre: "EDM/Dance", weight: 0.7 }, { genre: "Rock", weight: 0.4 }]],
+  ["covertronica",          [{ genre: "EDM/Dance", weight: 0.8 }]],
+
+  // ── Rock family ─────────────────────────────────────────────
+  ["rock",                  [{ genre: "Rock", weight: 1.0 }]],
+  ["classic rock",          [{ genre: "Rock", weight: 1.0 }]],
+  ["modern rock",           [{ genre: "Rock", weight: 1.0 }]],
+  ["modern alternative rock", [{ genre: "Rock", weight: 1.0 }]],
+  ["alternative rock",      [{ genre: "Rock", weight: 1.0 }]],
+  ["indie rock",            [{ genre: "Rock", weight: 1.0 }]],
+  ["indie",                 [{ genre: "Rock", weight: 0.7 }]],
+  ["soft rock",             [{ genre: "Rock", weight: 1.0 }]],
+  ["album rock",            [{ genre: "Rock", weight: 1.0 }]],
+  ["piano rock",            [{ genre: "Rock", weight: 1.0 }]],
+  ["country rock",          [{ genre: "Rock", weight: 0.5 }, { genre: "Country", weight: 0.7 }]],
+  ["art rock",              [{ genre: "Rock", weight: 1.0 }]],
+  ["glam rock",             [{ genre: "Rock", weight: 1.0 }]],
+  ["permanent wave",        [{ genre: "Rock", weight: 0.8 }]],
+  ["britpop",               [{ genre: "Rock", weight: 0.8 }, { genre: "Pop", weight: 0.3 }]],
+  ["madchester",            [{ genre: "Rock", weight: 0.8 }]],
+  ["beatlesque",            [{ genre: "Rock", weight: 0.8 }]],
+  ["neo-psychedelic",       [{ genre: "Rock", weight: 0.8 }]],
+  ["australian psych",      [{ genre: "Rock", weight: 0.8 }]],
+  ["rockabilly",            [{ genre: "Rock", weight: 1.0 }]],
+  ["punk",                  [{ genre: "Rock", weight: 1.0 }]],
+  ["metal",                 [{ genre: "Rock", weight: 1.0 }]],
+
+  // ── Country family ─────────────────────────────────────────
+  ["country",               [{ genre: "Country", weight: 1.0 }]],
+  ["contemporary country",  [{ genre: "Country", weight: 1.0 }]],
+  ["country pop",           [{ genre: "Country", weight: 0.7 }, { genre: "Pop", weight: 0.5 }]],
+  ["modern country rock",   [{ genre: "Country", weight: 0.7 }, { genre: "Rock", weight: 0.4 }]],
+  ["texas country",         [{ genre: "Country", weight: 1.0 }]],
+  ["country road",          [{ genre: "Country", weight: 1.0 }]],
+
+  // ── K-Pop family ───────────────────────────────────────────
+  ["k-pop",                 [{ genre: "K-Pop", weight: 1.0 }]],
+  ["kpop",                  [{ genre: "K-Pop", weight: 1.0 }]],
+  ["k-pop boy group",       [{ genre: "K-Pop", weight: 1.0 }]],
+  ["k-pop girl group",      [{ genre: "K-Pop", weight: 1.0 }]],
+
+  // ── Afrobeats family ───────────────────────────────────────
+  ["afrobeats",             [{ genre: "Afrobeats", weight: 1.0 }]],
+  ["afropop",               [{ genre: "Afrobeats", weight: 0.8 }, { genre: "Pop", weight: 0.3 }]],
+  ["afro dancehall",        [{ genre: "Afrobeats", weight: 1.0 }]],
+  ["afroswing",             [{ genre: "Afrobeats", weight: 0.8 }, { genre: "Hip Hop/Rap", weight: 0.3 }]],
+  ["azonto",                [{ genre: "Afrobeats", weight: 1.0 }]],
+  ["nigerian pop",          [{ genre: "Afrobeats", weight: 0.8 }, { genre: "Pop", weight: 0.3 }]],
+  ["nigerian hip hop",      [{ genre: "Afrobeats", weight: 0.7 }, { genre: "Hip Hop/Rap", weight: 0.5 }]],
+  ["gqom",                  [{ genre: "Afrobeats", weight: 0.8 }]],
+  ["alte",                  [{ genre: "Afrobeats", weight: 0.8 }]],
+
+  // ── Niche → nearest parent (reduces "Other") ──────────────
+  ["hollywood",             [{ genre: "Pop", weight: 0.3 }]],
+  ["show tunes",            [{ genre: "Pop", weight: 0.3 }]],
+  ["sad lo-fi",             [{ genre: "Hip Hop/Rap", weight: 0.5 }]],
+  ["ninja",                 [{ genre: "Hip Hop/Rap", weight: 0.5 }]],
+  ["bboy",                  [{ genre: "Hip Hop/Rap", weight: 0.5 }]],
+  ["modern funk",           [{ genre: "R&B", weight: 0.6 }]],
+  ["instrumental funk",     [{ genre: "R&B", weight: 0.5 }]],
+  ["funk",                  [{ genre: "R&B", weight: 0.5 }]],
+  ["black americana",       [{ genre: "R&B", weight: 0.5 }]],
+]);
+
+// Tier 2: Keyword fallback for tags not in TAG_MAP.
+// Scanned in order; multiple keywords can match within one tag.
+const KEYWORD_RULES: { kw: string; genre: string; weight: number }[] = [
+  { kw: "hip hop",   genre: "Hip Hop/Rap", weight: 0.8 },
+  { kw: "rap",       genre: "Hip Hop/Rap", weight: 0.8 },
+  { kw: "trap",      genre: "Hip Hop/Rap", weight: 0.7 },
+  { kw: "drill",     genre: "Hip Hop/Rap", weight: 0.7 },
+  { kw: "reggaeton", genre: "Latin",       weight: 0.8 },
+  { kw: "latin",     genre: "Latin",       weight: 0.7 },
+  { kw: "r&b",       genre: "R&B",         weight: 0.7 },
+  { kw: "soul",      genre: "R&B",         weight: 0.6 },
+  { kw: "rock",      genre: "Rock",        weight: 0.7 },
+  { kw: "metal",     genre: "Rock",        weight: 0.8 },
+  { kw: "punk",      genre: "Rock",        weight: 0.7 },
+  { kw: "country",   genre: "Country",     weight: 0.8 },
+  { kw: "edm",       genre: "EDM/Dance",   weight: 0.8 },
+  { kw: "house",     genre: "EDM/Dance",   weight: 0.7 },
+  { kw: "techno",    genre: "EDM/Dance",   weight: 0.8 },
+  { kw: "trance",    genre: "EDM/Dance",   weight: 0.8 },
+  { kw: "dance",     genre: "EDM/Dance",   weight: 0.4 },
+  { kw: "k-pop",     genre: "K-Pop",       weight: 0.9 },
+  { kw: "kpop",      genre: "K-Pop",       weight: 0.9 },
+  { kw: "afro",      genre: "Afrobeats",   weight: 0.6 },
+  { kw: "pop",       genre: "Pop",         weight: 0.5 },
+];
+
+// Priority order for tiebreaking (lower index = higher priority)
+const GENRE_PRIORITY: string[] = [
+  "Pop", "Hip Hop/Rap", "Latin", "R&B", "Rock",
+  "EDM/Dance", "Country", "K-Pop", "Afrobeats", "Other",
 ];
 
 export function classifyGenre(raw: string | null): string {
   if (!raw) return "Other";
-  for (const [re, label] of GENRE_RULES) {
-    if (re.test(raw)) return label;
+
+  // Parse: split by comma, trim, normalize, remove brackets/quotes
+  const cleaned = raw.replace(/[\[\]"']/g, "");
+  const tags = cleaned.split(",").map((t) => t.trim().toLowerCase()).filter(Boolean);
+  if (tags.length === 0) return "Other";
+
+  // Accumulate scores per parent genre
+  const scores: Record<string, number> = {};
+
+  for (const tag of tags) {
+    const exact = TAG_MAP.get(tag);
+    if (exact) {
+      for (const { genre, weight } of exact) {
+        scores[genre] = (scores[genre] || 0) + weight;
+      }
+    } else {
+      // Keyword fallback for unknown tags
+      for (const { kw, genre, weight } of KEYWORD_RULES) {
+        if (tag.includes(kw)) {
+          scores[genre] = (scores[genre] || 0) + weight;
+        }
+      }
+    }
   }
-  return "Other";
+
+  // Pick winner (highest score, tiebreak by priority)
+  const entries = Object.entries(scores);
+  if (entries.length === 0) return "Other";
+
+  entries.sort((a, b) => {
+    if (b[1] !== a[1]) return b[1] - a[1];
+    return GENRE_PRIORITY.indexOf(a[0]) - GENRE_PRIORITY.indexOf(b[0]);
+  });
+
+  return entries[0][0];
 }
 
 export const GENRE_COLORS: Record<string, string> = {
@@ -85,6 +420,7 @@ export const GENRE_COLORS: Record<string, string> = {
   "Rock": "#6366F1",
   "Country": "#D97706",
   "K-Pop": "#EC4899",
+  "Afrobeats": "#F97316",
   "Other": "#9CA3AF",
 };
 
@@ -295,53 +631,44 @@ export async function fetchSpotifyLifespanContext(
   };
 }
 
-// ---------- Q1 Aggregation: Longevity classification ----------
+// ---------- Longevity classification: Impact × Endurance ----------
+// Two continuous scores derive from peak_rank and weeks_on_chart.
+// Quadrant position on these two axes determines the category label.
 
-export type LongevityCategory = "viral" | "sustained" | "slow_burn" | "other";
+export type LongevityCategory = "viral" | "lasting" | "slow_burn" | "flash";
+
+export const LONGEVITY_THRESHOLD = 0.35;
+
+export function songImpactScore(peakRank: number): number {
+  // #1 → 1.00, #14 → 0.50, #50 → 0.26, #200 → 0.00
+  return Math.max(0, Math.min(1, 1 - Math.log(Math.max(peakRank, 1)) / Math.log(200)));
+}
+
+export function songEnduranceScore(weeks: number): number {
+  // 1w → 0.00, 4w → 0.31, 8w → 0.46, 15w → 0.60, 50w → 0.87, 90w → 1.00
+  return Math.max(0, Math.min(1, Math.log(Math.max(weeks, 1)) / Math.log(90)));
+}
 
 export function classifySongLongevity(summary: SongSummary): LongevityCategory {
-  const weeks = summary.weeks_on_chart;
-  const peak = summary.peak_rank;
+  const impact = songImpactScore(summary.peak_rank);
+  const endurance = songEnduranceScore(summary.weeks_on_chart);
 
-  // Use streams ratio (max / avg) to detect spiky trajectories.
-  // A high ratio means the song had a sharp peak relative to its average —
-  // characteristic of viral spikes even if the song lingered on chart.
-  const maxS = summary.max_streams || 0;
-  const avgS = summary.avg_streams || 1;
-  const spikeRatio = maxS / avgS;
-
-  // Pure viral: peaked high, disappeared fast
-  if (peak <= 20 && weeks <= 8) return "viral";
-
-  // Spiky viral: peaked high with a pronounced spike shape, even if total weeks > 8.
-  // The spike ratio threshold (~2.5) catches songs that had an intense burst
-  // but also a long low-rank tail (e.g. re-entries, holiday spikes).
-  if (peak <= 10 && weeks <= 15 && spikeRatio >= 2.5) return "viral";
-
-  // Slow burn: climbed gradually to a moderate peak — must check BEFORE sustained
-  // because a slow burn with 15+ weeks would otherwise be swallowed by sustained.
-  // Key signal: many weeks but not a top-5 peak (those are just big sustained hits).
-  if (peak <= 50 && peak > 10 && weeks >= 8 && weeks <= 30) return "slow_burn";
-
-  // Sustained: on chart 15+ weeks
-  if (weeks >= 15) return "sustained";
-
-  // Remaining slow burns (shorter runs, decent peak)
-  if (peak <= 50 && weeks >= 8) return "slow_burn";
-
-  return "other";
+  if (impact >= LONGEVITY_THRESHOLD && endurance < LONGEVITY_THRESHOLD) return "viral";
+  if (impact >= LONGEVITY_THRESHOLD && endurance >= LONGEVITY_THRESHOLD) return "lasting";
+  if (impact < LONGEVITY_THRESHOLD && endurance >= LONGEVITY_THRESHOLD) return "slow_burn";
+  return "flash";
 }
 
 export const LONGEVITY_COLORS: Record<LongevityCategory, string> = {
   viral: "#EF4444",
-  sustained: "#1DB954",
+  lasting: "#1DB954",
   slow_burn: "#3B82F6",
-  other: "#52525b",
+  flash: "#71717a",
 };
 
 export const LONGEVITY_LABELS: Record<LongevityCategory, string> = {
-  viral: "Viral Spike",
-  sustained: "Sustained Hit",
+  viral: "Viral",
+  lasting: "Lasting",
   slow_burn: "Slow Burn",
-  other: "Other",
+  flash: "Flash",
 };

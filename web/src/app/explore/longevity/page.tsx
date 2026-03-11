@@ -45,11 +45,11 @@ export default async function LongevityPage() {
         </div>
 
         <div>
-          <ChartLongevityExplorer summaries={summaries} initialTrajectories={trajectories} />
+          <ChartLongevityExplorer summaries={summaries} />
         </div>
 
-        {/* Billboard "The Long View" section */}
-        {lifespanByYear.length > 0 && (
+        {/* Billboard "The Long View" section — commented out for now */}
+        {/* {lifespanByYear.length > 0 && (
           <section className="mt-24">
             <div className="mb-2 flex items-center gap-2">
               <span className="h-3 w-3 rounded-full bg-amber-600" />
@@ -67,7 +67,7 @@ export default async function LongevityPage() {
               <LongViewSection lifespanData={lifespanByYear} />
             </div>
           </section>
-        )}
+        )} */}
 
         <ExploreFeaturedSongs categories={exemplars} />
       </div>

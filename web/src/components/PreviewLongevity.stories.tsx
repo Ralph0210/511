@@ -31,15 +31,15 @@ export const Default: Story = {
 export const ViralOnly: Story = {
   args: {
     data: MOCK_LONGEVITY_DATA.filter(
-      (d) => d.category === "viral" || d.category === "other"
+      (d) => d.category === "viral" || d.category === "flash"
     ),
   },
 };
 
-export const SustainedOnly: Story = {
+export const LastingOnly: Story = {
   args: {
     data: MOCK_LONGEVITY_DATA.filter(
-      (d) => d.category === "sustained" || d.category === "other"
+      (d) => d.category === "lasting" || d.category === "flash"
     ),
   },
 };
