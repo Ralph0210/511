@@ -6,10 +6,10 @@ import type { ScatterPoint } from "@/lib/featured-exemplars";
 import { LONGEVITY_COLORS, type LongevityCategory } from "@/lib/spotify-data";
 
 const CATEGORY_LABELS: Record<string, string> = {
-  viral: "Viral Spike",
-  sustained: "Sustained Hit",
+  viral: "Viral",
+  lasting: "Lasting",
   slow_burn: "Slow Burn",
-  other: "Other",
+  flash: "Flash",
 };
 
 type Props = {
@@ -69,8 +69,8 @@ export default function PreviewLongevity({ data }: Props) {
         .attr("opacity", 0.5);
     });
 
-    // Points — render "other" first (background), then featured categories on top
-    const categories: LongevityCategory[] = ["other", "slow_burn", "sustained", "viral"];
+    // Points — render "flash" first (background), then featured categories on top
+    const categories: LongevityCategory[] = ["flash", "slow_burn", "lasting", "viral"];
     for (const cat of categories) {
       const points = data.filter((d) => d.category === cat);
       dataGroup
@@ -79,9 +79,9 @@ export default function PreviewLongevity({ data }: Props) {
         .join("circle")
         .attr("cx", (d) => x(d.weeks))
         .attr("cy", (d) => y(d.peak))
-        .attr("r", cat === "other" ? 2.5 : 4)
+        .attr("r", cat === "flash" ? 2.5 : 4)
         .attr("fill", LONGEVITY_COLORS[cat])
-        .attr("opacity", cat === "other" ? 0.2 : 0.6);
+        .attr("opacity", cat === "flash" ? 0.2 : 0.6);
     }
 
     // X axis
@@ -132,7 +132,7 @@ export default function PreviewLongevity({ data }: Props) {
       );
 
     // Legend
-    const legendCats: LongevityCategory[] = ["viral", "sustained", "slow_burn"];
+    const legendCats: LongevityCategory[] = ["viral", "lasting", "slow_burn"];
     const legend = g.append("g").attr("transform", `translate(${W - 260},0)`);
     legendCats.forEach((cat, i) => {
       const lx = i * 90;

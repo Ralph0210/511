@@ -10,41 +10,36 @@ import {
   type LongevityCategory,
 } from "@/lib/spotify-data";
 
-type TrajectoryPoint = {
-  track_id: string;
-  track_name: string;
-  artist_name: string;
-  week: string;
-  rank: number;
-  streams: number | null;
-};
-
 type ClassifiedSong = SongSummary & { category: LongevityCategory };
 
 type Props = {
   summaries: SongSummary[];
-  initialTrajectories: TrajectoryPoint[];
 };
 
-const CATEGORY_ORDER: LongevityCategory[] = ["viral", "sustained", "slow_burn", "other"];
+const CATEGORY_ORDER: LongevityCategory[] = ["viral", "lasting", "slow_burn", "flash"];
 
 const CATEGORY_DESCRIPTIONS: Record<LongevityCategory, string> = {
-  viral: "Peak Top 20, \u22648 weeks",
-  sustained: "15+ weeks on chart",
-  slow_burn: "Peak Top 50, 8+ weeks",
-  other: "Everything else",
+  viral: "High impact, short chart life",
+  lasting: "High impact, long chart life",
+  slow_burn: "Moderate impact, long chart life",
+  flash: "Brief chart appearance",
 };
 
-export default function ChartLongevityExplorer({ summaries, initialTrajectories }: Props) {
+const CATEGORY_CRITERIA: Record<LongevityCategory, string> = {
+  viral: "Impact score \u2265 0.35 (peak roughly #14 or higher) AND endurance score < 0.35 (fewer than ~4 weeks on chart)",
+  lasting: "Impact score \u2265 0.35 (peak roughly #14 or higher) AND endurance score \u2265 0.35 (~4+ weeks on chart)",
+  slow_burn: "Impact score < 0.35 (peak below ~#14) AND endurance score \u2265 0.35 (~4+ weeks on chart)",
+  flash: "Both impact and endurance scores below 0.35 — low peak rank and short chart life",
+};
+
+export default function ChartLongevityExplorer({ summaries }: Props) {
   const svgRef = useRef<SVGSVGElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
   const [activeCategories, setActiveCategories] = useState<Set<LongevityCategory | "all">>(
-    () => new Set(["viral", "sustained", "slow_burn"] as const),
+    () => new Set(["viral", "lasting", "slow_burn"] as const),
   );
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedSongs, setSelectedSongs] = useState<Set<string>>(new Set());
-  const [trajectories] = useState<TrajectoryPoint[]>(initialTrajectories);
-
   // Classify all songs
   const classified = useMemo<ClassifiedSong[]>(() => {
     return summaries.map((s) => ({
@@ -84,7 +79,7 @@ export default function ChartLongevityExplorer({ summaries, initialTrajectories 
         if (next.has("all")) {
           next.clear();
           next.add("viral");
-          next.add("sustained");
+          next.add("lasting");
           next.add("slow_burn");
         } else {
           next.clear();
@@ -111,46 +106,21 @@ export default function ChartLongevityExplorer({ summaries, initialTrajectories 
     return classified.filter((s) => activeCategories.has(s.category));
   }, [classified, activeCategories]);
 
-  // Group trajectories by track
-  const trajectoryByTrack = useMemo(() => {
-    const map = new Map<string, TrajectoryPoint[]>();
-    for (const t of trajectories) {
-      if (!map.has(t.track_id)) map.set(t.track_id, []);
-      map.get(t.track_id)!.push(t);
-    }
+  // Precompute percentile ranks for tooltip context
+  const percentileMap = useMemo(() => {
+    const sortedByWeeks = [...classified].sort((a, b) => a.weeks_on_chart - b.weeks_on_chart);
+    const map = new Map<string, number>();
+    sortedByWeeks.forEach((s, i) => {
+      map.set(s.track_id, Math.round((i / (sortedByWeeks.length - 1)) * 100));
+    });
     return map;
-  }, [trajectories]);
+  }, [classified]);
 
-  // Compute average trajectories per category
-  const avgTrajectories = useMemo(() => {
-    const result: Record<string, { weekNum: number; avgRank: number }[]> = {};
-
-    for (const cat of CATEGORY_ORDER) {
-      const songIds = classified
-        .filter((s) => s.category === cat)
-        .map((s) => s.track_id);
-
-      const weekBuckets: Record<number, number[]> = {};
-      for (const id of songIds) {
-        const traj = trajectoryByTrack.get(id);
-        if (!traj) continue;
-        const sorted = [...traj].sort((a, b) => a.week.localeCompare(b.week));
-        sorted.forEach((t, i) => {
-          if (!weekBuckets[i]) weekBuckets[i] = [];
-          weekBuckets[i].push(t.rank);
-        });
-      }
-
-      result[cat] = Object.entries(weekBuckets)
-        .map(([w, ranks]) => ({
-          weekNum: parseInt(w),
-          avgRank: ranks.reduce((a, b) => a + b, 0) / ranks.length,
-        }))
-        .sort((a, b) => a.weekNum - b.weekNum)
-        .slice(0, 30);
-    }
-    return result;
-  }, [classified, trajectoryByTrack]);
+  // Detect reduced motion preference
+  const prefersReducedMotion = useMemo(() => {
+    if (typeof window === "undefined") return false;
+    return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  }, []);
 
   // --- Scatter plot ---
   useEffect(() => {
@@ -158,45 +128,67 @@ export default function ChartLongevityExplorer({ summaries, initialTrajectories 
     const svg = d3.select(svgRef.current);
     svg.selectAll("*").remove();
 
-    const container = svgRef.current.parentElement!;
-    const width = container.clientWidth;
-    const height = 520;
-    svg.attr("width", width).attr("height", height);
+    // viewBox-based responsive sizing (data-visualization.md §2.1)
+    const WIDTH = 800;
+    const HEIGHT = 400;
+    svg.attr("viewBox", `0 0 ${WIDTH} ${HEIGHT}`)
+      .attr("preserveAspectRatio", "xMidYMid meet")
+      .style("width", "100%")
+      .style("height", "auto");
 
-    const margin = { top: 20, right: 40, bottom: 56, left: 60 };
-    const w = width - margin.left - margin.right;
-    const h = height - margin.top - margin.bottom;
+    // Standard margins (data-visualization.md §2.2)
+    const MARGIN = { top: 28, right: 64, bottom: 56, left: 64 };
+    const w = WIDTH - MARGIN.left - MARGIN.right;
+    const h = HEIGHT - MARGIN.top - MARGIN.bottom;
 
-    const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+    const g = svg.append("g").attr("transform", `translate(${MARGIN.left},${MARGIN.top})`);
 
-    // Use sqrt scale on x-axis to spread the dense cluster
+    // clipPath for data group (data-visualization.md §2.6)
+    const CLIP_PAD = 10; // accommodate dot radius + stroke at edges
+    svg.append("defs").append("clipPath").attr("id", "longevity-clip")
+      .append("rect").attr("x", -CLIP_PAD).attr("y", -CLIP_PAD).attr("width", w + CLIP_PAD * 2).attr("height", h + CLIP_PAD);
+
+    const dataGroup = g.append("g")
+      .attr("clip-path", "url(#longevity-clip)");
+
+    // Scales with .clamp(true) (data-visualization.md §2.10)
     const xMax = d3.max(filteredData, (d) => d.weeks_on_chart) || 50;
-    const x = d3.scaleSqrt().domain([0, xMax]).range([0, w]).nice();
-    const y = d3.scaleLinear().domain([200, 1]).range([h, 0]);
+    const x = d3.scaleSqrt().domain([0, xMax]).range([0, w]).nice().clamp(true);
+    const y = d3.scaleLinear().domain([200, 1]).range([h, 0]).clamp(true);
 
-    // Grid lines
+    // Grid lines — max 5 (data-visualization.md §2.4, §3.5)
+    const yTickValues = [1, 50, 100, 150, 200];
     g.append("g")
       .selectAll("line")
-      .data(y.ticks(10))
+      .data(yTickValues)
       .join("line")
       .attr("x1", 0).attr("x2", w)
       .attr("y1", (d) => y(d)).attr("y2", (d) => y(d))
       .attr("stroke", "#27272a").attr("stroke-dasharray", "2,2");
 
-    // X axis
+    // Axis styling utility (data-visualization.md §2.4)
+    function styleAxis(sel: d3.Selection<SVGGElement, unknown, null, undefined>) {
+      sel.select(".domain").attr("stroke", "#3f3f46");
+      sel.selectAll(".tick line").attr("stroke", "#3f3f46");
+      sel.selectAll(".tick text").attr("fill", "#9CA3AF").attr("font-size", 12);
+    }
+
+    // X axis — max 6 ticks (data-visualization.md §2.4)
     g.append("g")
       .attr("transform", `translate(0,${h})`)
-      .call(d3.axisBottom(x).ticks(8))
-      .call((sel) => sel.select(".domain").attr("stroke", "#3f3f46"))
-      .call((sel) => sel.selectAll(".tick line").attr("stroke", "#3f3f46"))
-      .call((sel) => sel.selectAll(".tick text").attr("fill", "#9CA3AF").attr("font-size", 12));
+      .call(d3.axisBottom(x).tickValues([1, 5, 10, 25, 50, 100, 150, 200].filter(v => v <= xMax)).tickSizeOuter(0).tickPadding(8))
+      .call(styleAxis);
 
-    // Y axis
+    // Y axis — 5 explicit tick values with # prefix (data-visualization.md §2.4)
     g.append("g")
-      .call(d3.axisLeft(y).ticks(10))
-      .call((sel) => sel.select(".domain").attr("stroke", "#3f3f46"))
-      .call((sel) => sel.selectAll(".tick line").attr("stroke", "#3f3f46"))
-      .call((sel) => sel.selectAll(".tick text").attr("fill", "#9CA3AF").attr("font-size", 12));
+      .call(
+        d3.axisLeft(y)
+          .tickValues(yTickValues)
+          .tickSizeOuter(0)
+          .tickPadding(8)
+          .tickFormat((d) => `#${d}`),
+      )
+      .call(styleAxis);
 
     // Axis labels
     g.append("text")
@@ -207,7 +199,7 @@ export default function ChartLongevityExplorer({ summaries, initialTrajectories 
 
     g.append("text")
       .attr("transform", "rotate(-90)")
-      .attr("x", -h / 2).attr("y", -44)
+      .attr("x", -h / 2).attr("y", -48)
       .attr("text-anchor", "middle")
       .attr("font-size", 13).attr("fill", "#71717a")
       .text("Peak Rank (1 = best)");
@@ -222,7 +214,9 @@ export default function ChartLongevityExplorer({ summaries, initialTrajectories 
       return aSelected - bSelected;
     });
 
-    g.selectAll("circle.dot")
+    const animDuration = prefersReducedMotion ? 0 : 100;
+
+    dataGroup.selectAll("circle.dot")
       .data(sortedData, (d) => (d as ClassifiedSong).track_id)
       .join("circle")
       .attr("class", "dot")
@@ -236,10 +230,11 @@ export default function ChartLongevityExplorer({ summaries, initialTrajectories 
       .style("cursor", "pointer")
       .on("mouseenter", function (event, d) {
         d3.select(this)
-          .transition().duration(100)
+          .transition().duration(animDuration)
           .attr("r", selectedSongs.has(d.track_id) ? 9 : 6)
           .attr("opacity", 1);
 
+        const pctile = percentileMap.get(d.track_id) ?? 0;
         const imgTag = d.album_img
           ? `<img src="${d.album_img}" alt="" style="width:40px;height:40px;border-radius:6px;object-fit:cover;flex-shrink:0" />`
           : `<div style="width:40px;height:40px;border-radius:6px;background:#3f3f46;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:14px;color:#71717a">&#9835;</div>`;
@@ -254,14 +249,14 @@ export default function ChartLongevityExplorer({ summaries, initialTrajectories 
             `<div>` +
             `<strong style="font-size:13px">${d.track_name}</strong><br/>` +
             `<span style="color:#9CA3AF;font-size:12px">${d.artist_name}</span><br/>` +
-            `<span style="font-size:12px">Peak #${d.peak_rank} · ${d.weeks_on_chart}w</span><br/>` +
+            `<span style="font-size:12px">Peak #${d.peak_rank} · ${d.weeks_on_chart}w · longer than ${pctile}% of songs</span><br/>` +
             `<span style="color:${LONGEVITY_COLORS[d.category]};font-size:12px;font-weight:600">${LONGEVITY_LABELS[d.category]}</span>` +
             `</div></div>`,
           );
       })
       .on("mouseleave", function (_, d) {
         d3.select(this)
-          .transition().duration(100)
+          .transition().duration(animDuration)
           .attr("r", selectedSongs.has(d.track_id) ? 7 : 4)
           .attr("opacity", selectedSongs.has(d.track_id) ? 1 : 0.55);
         tooltip.style("opacity", "0");
@@ -275,7 +270,7 @@ export default function ChartLongevityExplorer({ summaries, initialTrajectories 
         });
       });
 
-    // Persistent labels for selected songs
+    // Persistent labels for selected songs (outside clip for visibility)
     const labelGroup = g.append("g").attr("class", "labels");
     selectedSongs.forEach((id) => {
       const song = classified.find((s) => s.track_id === id);
@@ -286,8 +281,8 @@ export default function ChartLongevityExplorer({ summaries, initialTrajectories 
       const cy = y(song.peak_rank);
 
       // Position label to the right, unless near right edge
-      const labelX = cx + w * 0.7 < w ? cx + 12 : cx - 12;
-      const anchor = cx + w * 0.7 < w ? "start" : "end";
+      const labelX = cx + w * 0.3 < w ? cx + 12 : cx - 12;
+      const anchor = cx + w * 0.3 < w ? "start" : "end";
 
       // Background rect + text
       const labelG = labelGroup.append("g");
@@ -318,50 +313,7 @@ export default function ChartLongevityExplorer({ summaries, initialTrajectories 
         .attr("opacity", 0.5);
     });
 
-    // Average trajectory lines (small inset sparklines in bottom-right)
-    if (Object.keys(avgTrajectories).length > 0) {
-      const insetW = Math.min(180, w * 0.22);
-      const insetH = 80;
-      const insetX = w - insetW - 8;
-      const insetY = 8;
-
-      const insetG = g.append("g")
-        .attr("transform", `translate(${insetX},${insetY})`);
-
-      // Background
-      insetG.append("rect")
-        .attr("width", insetW).attr("height", insetH)
-        .attr("rx", 8)
-        .attr("fill", "#121212").attr("stroke", "#27272a").attr("stroke-width", 1);
-
-      insetG.append("text")
-        .attr("x", insetW / 2).attr("y", 14)
-        .attr("text-anchor", "middle")
-        .attr("font-size", 12).attr("fill", "#71717a")
-        .text("Avg. rank trajectory");
-
-      const sparkX = d3.scaleLinear().domain([0, 29]).range([8, insetW - 8]);
-      const sparkY = d3.scaleLinear().domain([200, 1]).range([insetH - 8, 22]);
-
-      const line = d3.line<{ weekNum: number; avgRank: number }>()
-        .x((d) => sparkX(d.weekNum))
-        .y((d) => sparkY(d.avgRank))
-        .curve(d3.curveCatmullRom);
-
-      for (const cat of CATEGORY_ORDER) {
-        if (!activeCategories.has("all") && !activeCategories.has(cat)) continue;
-        const traj = avgTrajectories[cat];
-        if (!traj?.length) continue;
-
-        insetG.append("path")
-          .attr("d", line(traj))
-          .attr("fill", "none")
-          .attr("stroke", LONGEVITY_COLORS[cat])
-          .attr("stroke-width", 1.5)
-          .attr("opacity", 0.8);
-      }
-    }
-  }, [classified, filteredData, selectedSongs, activeCategories, avgTrajectories]);
+  }, [classified, filteredData, selectedSongs, activeCategories, percentileMap, prefersReducedMotion]);
 
   return (
     <div className="space-y-4">
@@ -516,26 +468,17 @@ export default function ChartLongevityExplorer({ summaries, initialTrajectories 
             />
             <strong>{LONGEVITY_LABELS[cat]}:</strong>
             <span className="text-zinc-500">{CATEGORY_DESCRIPTIONS[cat]}</span>
+            <span className="group relative cursor-help">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" className="text-zinc-600 transition-colors group-hover:text-zinc-400">
+                <circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.5" />
+                <text x="8" y="12" textAnchor="middle" fill="currentColor" fontSize="10" fontWeight="600">i</text>
+              </svg>
+              <span className="pointer-events-none absolute bottom-full left-1/2 z-20 mb-2 w-64 -translate-x-1/2 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs leading-relaxed text-zinc-300 opacity-0 shadow-xl transition-opacity group-hover:opacity-100">
+                {CATEGORY_CRITERIA[cat]}
+              </span>
+            </span>
           </span>
         ))}
-      </div>
-
-      {/* Insights */}
-      <div className="rounded-xl bg-zinc-800/50 p-5">
-        <h3 className="text-sm font-semibold">Key Insights</h3>
-        <ul className="mt-2 space-y-1 text-sm text-muted">
-          <li>
-            Songs that peak higher tend to stay longer — the top-left cluster shows sustained
-            hits with both high peaks and long chart runs.
-          </li>
-          <li>
-            Viral spikes (red) cluster in the bottom-left — high peaks but short chart lives,
-            suggesting rapid audience attention followed by equally rapid decline.
-          </li>
-          <li>
-            Click any dot to highlight it, or search for specific songs to compare their profiles.
-          </li>
-        </ul>
       </div>
     </div>
   );

@@ -1,23 +1,22 @@
 "use client";
 
-export type LensType = "genre" | "longevity" | "streams" | "sound";
+export type LensType = "genre" | "longevity";
 export type DepthAxisType = "streams" | "weeks" | "peak";
 
 type Props = {
   activeLens: LensType;
   onLensChange: (lens: LensType) => void;
-  soundDisabled?: boolean;
   // Depth axis (shown when inside a category)
   activeCategory?: string | null;
   depthAxis?: DepthAxisType;
   onDepthChange?: (axis: DepthAxisType) => void;
+  /** Compact mode for rendering inside the header navbar */
+  compact?: boolean;
 };
 
-const LENSES: { id: LensType; label: string }[] = [
-  { id: "genre", label: "By Genre" },
-  { id: "longevity", label: "Viral vs Lasting" },
-  { id: "streams", label: "By Streams" },
-  { id: "sound", label: "By Sound" },
+const LENSES: { id: LensType; label: string; description: string }[] = [
+  { id: "genre", label: "By Genre", description: "Group songs by their musical genre" },
+  { id: "longevity", label: "Viral vs Lasting", description: "Group songs by chart impact and endurance" },
 ];
 
 const DEPTH_AXES: { id: DepthAxisType; label: string }[] = [
@@ -29,51 +28,26 @@ const DEPTH_AXES: { id: DepthAxisType; label: string }[] = [
 export default function BubbleLensSelector({
   activeLens,
   onLensChange,
-  soundDisabled = true,
   activeCategory,
   depthAxis = "streams",
   onDepthChange,
+  compact = false,
 }: Props) {
-  return (
-    <div className="sticky top-16 z-30 bg-[#121212]/90 py-3 backdrop-blur">
-      <div className="flex gap-2 overflow-x-auto">
-        {LENSES.map(({ id, label }) => {
-          const isActive = activeLens === id;
-          const isDisabled = id === "sound" && soundDisabled;
-
-          return (
-            <button
-              key={id}
-              onClick={() => !isDisabled && onLensChange(id)}
-              disabled={isDisabled}
-              className={`whitespace-nowrap rounded-full px-4 py-2 text-sm font-medium transition-colors ${
-                isActive
-                  ? "bg-accent text-black"
-                  : isDisabled
-                    ? "cursor-not-allowed border border-zinc-800 bg-surface text-zinc-600"
-                    : "border border-zinc-800 bg-surface text-[#B3B3B3] hover:border-zinc-700 hover:text-white"
-              }`}
-            >
-              {label}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Depth axis selector — visible when inside a category */}
-      {activeCategory && onDepthChange && (
-        <div className="mt-2 flex items-center gap-2">
-          <span className="text-xs font-medium text-zinc-500">Depth:</span>
-          {DEPTH_AXES.map(({ id, label }) => {
-            const isActive = depthAxis === id;
+  if (compact) {
+    return (
+      <div className="flex items-center gap-3">
+        <div className="flex gap-1.5">
+          {LENSES.map(({ id, label, description }) => {
+            const isActive = activeLens === id;
             return (
               <button
                 key={id}
-                onClick={() => onDepthChange(id)}
+                onClick={() => onLensChange(id)}
+                title={description}
                 className={`whitespace-nowrap rounded-full px-3 py-1 text-xs font-medium transition-colors ${
                   isActive
-                    ? "bg-white/15 text-white"
-                    : "text-zinc-500 hover:text-zinc-300"
+                    ? "bg-accent text-black"
+                    : "text-zinc-400 hover:text-white"
                 }`}
               >
                 {label}
@@ -81,7 +55,83 @@ export default function BubbleLensSelector({
             );
           })}
         </div>
-      )}
+        {activeCategory && onDepthChange && (
+          <>
+            <div className="h-4 w-px bg-zinc-700" />
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs font-medium text-zinc-500">Depth:</span>
+              {DEPTH_AXES.map(({ id, label }) => {
+                const isActive = depthAxis === id;
+                return (
+                  <button
+                    key={id}
+                    onClick={() => onDepthChange(id)}
+                    className={`whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium transition-colors ${
+                      isActive
+                        ? "bg-white/15 text-white"
+                        : "text-zinc-500 hover:text-zinc-300"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+          </>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="py-3">
+      <div className="flex items-center gap-3 overflow-x-auto">
+        <div className="flex gap-2">
+          {LENSES.map(({ id, label, description }) => {
+            const isActive = activeLens === id;
+            return (
+              <button
+                key={id}
+                onClick={() => onLensChange(id)}
+                title={description}
+                className={`whitespace-nowrap rounded-full px-4 py-2 text-sm font-medium transition-colors ${
+                  isActive
+                    ? "bg-accent text-black"
+                    : "border border-zinc-800 bg-surface text-[#B3B3B3] hover:border-zinc-700 hover:text-white"
+                }`}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Depth axis selector — visible when inside a category */}
+        {activeCategory && onDepthChange && (
+          <>
+            <div className="h-5 w-px bg-zinc-700" />
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-medium text-zinc-500">Depth:</span>
+              {DEPTH_AXES.map(({ id, label }) => {
+                const isActive = depthAxis === id;
+                return (
+                  <button
+                    key={id}
+                    onClick={() => onDepthChange(id)}
+                    className={`whitespace-nowrap rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                      isActive
+                        ? "bg-white/15 text-white"
+                        : "text-zinc-500 hover:text-zinc-300"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }

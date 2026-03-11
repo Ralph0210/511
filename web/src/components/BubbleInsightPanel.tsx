@@ -20,8 +20,6 @@ export default function BubbleInsightPanel({ lens, songs }: Props) {
     <div className="mt-4 rounded-xl border border-zinc-800 bg-surface p-4">
       {lens === "genre" && <GenreInsight songs={songs} />}
       {lens === "longevity" && <LongevityInsight songs={songs} />}
-      {lens === "streams" && <StreamsInsight songs={songs} />}
-      {lens === "sound" && <SoundInsight songs={songs} />}
     </div>
   );
 }
@@ -49,7 +47,7 @@ function LongevityInsight({ songs }: { songs: BubbleSong[] }) {
   const counts: Record<string, number> = {};
   for (const s of songs) counts[s.longevity] = (counts[s.longevity] || 0) + 1;
 
-  const cats: LongevityCategory[] = ["viral", "sustained", "slow_burn"];
+  const cats: LongevityCategory[] = ["viral", "lasting", "slow_burn"];
   return (
     <div className="flex flex-wrap items-baseline gap-x-6 gap-y-1 text-sm">
       {cats.map((cat) => (
@@ -63,50 +61,3 @@ function LongevityInsight({ songs }: { songs: BubbleSong[] }) {
   );
 }
 
-function StreamsInsight({ songs }: { songs: BubbleSong[] }) {
-  const streams = songs.map((s) => s.max_streams).sort((a, b) => b - a);
-  const median = streams[Math.floor(streams.length / 2)];
-  const top = songs[0];
-
-  return (
-    <div className="flex flex-wrap items-baseline gap-x-6 gap-y-1 text-sm">
-      <span className="text-[#B3B3B3]">
-        Top: <strong className="text-white">{fmtNum(streams[0])}</strong> peak weekly streams ({top.track_name})
-      </span>
-      <span className="text-[#B3B3B3]">
-        Median: <strong className="text-white">{fmtNum(median)}</strong>
-      </span>
-    </div>
-  );
-}
-
-function SoundInsight({ songs }: { songs: BubbleSong[] }) {
-  const withFeatures = songs.filter((s) => s.energy != null && s.valence != null);
-  if (!withFeatures.length) {
-    return (
-      <p className="text-sm text-[#B3B3B3]">
-        Audio feature data unavailable.
-      </p>
-    );
-  }
-
-  const avgEnergy = withFeatures.reduce((s, d) => s + (d.energy ?? 0), 0) / withFeatures.length;
-  const avgValence = withFeatures.reduce((s, d) => s + (d.valence ?? 0), 0) / withFeatures.length;
-
-  return (
-    <div className="flex flex-wrap items-baseline gap-x-6 gap-y-1 text-sm">
-      <span className="text-[#B3B3B3]">
-        X = Energy, Y = Valence (happiness)
-      </span>
-      <span className="text-[#B3B3B3]">
-        Avg energy: <strong className="text-white">{avgEnergy.toFixed(2)}</strong>
-      </span>
-      <span className="text-[#B3B3B3]">
-        Avg valence: <strong className="text-white">{avgValence.toFixed(2)}</strong>
-      </span>
-      <span className="text-[#B3B3B3]">
-        Colored by genre to reveal sonic clustering
-      </span>
-    </div>
-  );
-}

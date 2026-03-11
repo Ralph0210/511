@@ -29,9 +29,9 @@ function makeScatterPoints(
 
 export const MOCK_LONGEVITY_DATA: ScatterPoint[] = [
   ...makeScatterPoints("viral", [1, 8], [1, 30], 40),
-  ...makeScatterPoints("sustained", [15, 50], [1, 20], 50),
+  ...makeScatterPoints("lasting", [15, 50], [1, 20], 50),
   ...makeScatterPoints("slow_burn", [20, 45], [10, 80], 40),
-  ...makeScatterPoints("other", [1, 30], [20, 200], 80),
+  ...makeScatterPoints("flash", [1, 30], [20, 200], 80),
 ];
 
 // --- PreviewSongAnatomy mock data ---
