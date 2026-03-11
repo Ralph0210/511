@@ -213,29 +213,95 @@ export async function fetchHomepageData(): Promise<{ exemplars: VizExemplars; pr
     songAnatomy.push(toExemplar(shortDurMatch, `${mins}:${secs.toString().padStart(2, "0")} long — peaked at #${shortDurMatch.peak_rank}`));
   }
 
-  // --- Genre Pulse exemplars: top 2 genres by song count ---
-  // Pick the two most dominant genres and a representative hit from each
-  const genreTotalsForExemplars: Record<string, number> = {};
+  // Genre shares by year (needed for exemplars + stat + preview)
+  const genreYearCounts: Record<number, Record<string, number>> = {};
   for (const s of allSongs) {
-    const g = classifyGenre(s.artist_genres);
-    genreTotalsForExemplars[g] = (genreTotalsForExemplars[g] || 0) + 1;
+    const yr = parseInt(s.first_week?.slice(0, 4) || "0");
+    if (yr < 2017 || yr > 2021) continue;
+    if (!genreYearCounts[yr]) genreYearCounts[yr] = {};
+    const genre = classifyGenre(s.artist_genres);
+    genreYearCounts[yr][genre] = (genreYearCounts[yr][genre] || 0) + 1;
   }
-  const topGenres = Object.entries(genreTotalsForExemplars)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 2);
 
+  const genreShares = Object.entries(genreYearCounts)
+    .sort(([a], [b]) => Number(a) - Number(b))
+    .map(([year, counts]) => {
+      const total = Object.values(counts).reduce((a, b) => a + b, 0);
+      const shares: Record<string, number> = {};
+      for (const [genre, count] of Object.entries(counts)) {
+        shares[genre] = total > 0 ? (count / total) * 100 : 0;
+      }
+      return { year: Number(year), shares };
+    });
+
+  // --- Genre Pulse exemplars: biggest riser + biggest faller ---
+  // Pick representative songs from genres that shifted most in rank over time
   const genrePulse: ExemplarSong[] = [];
-  for (const [genre, count] of topGenres) {
-    const pct = Math.round((count / allSongs.length) * 100);
-    const match = allSongs.find(
-      (s) => s.album_img && classifyGenre(s.artist_genres) === genre && !usedIds.has(s.track_id)
-    );
-    if (match) {
-      usedIds.add(match.track_id);
-      genrePulse.push({
-        ...toExemplar(match, `${genre} — ${pct}% of all charting songs`),
-        category: genre,
+
+  if (genreShares.length >= 2) {
+    const firstYearShares = genreShares[0];
+    const lastYearShares = genreShares[genreShares.length - 1];
+
+    const rankByShare = (shares: Record<string, number>) =>
+      Object.entries(shares).sort((a, b) => b[1] - a[1]).map(([g]) => g);
+
+    const earlyRanks = rankByShare(firstYearShares.shares);
+    const lateRanks = rankByShare(lastYearShares.shares);
+
+    // Compute rank change for each genre
+    const shifts: { genre: string; change: number; latePct: number }[] = [];
+    for (const genre of lateRanks) {
+      const oldIdx = earlyRanks.indexOf(genre);
+      if (oldIdx === -1) continue;
+      const newIdx = lateRanks.indexOf(genre);
+      shifts.push({
+        genre,
+        change: oldIdx - newIdx, // positive = rose, negative = fell
+        latePct: Math.round(lastYearShares.shares[genre] || 0),
       });
+    }
+    shifts.sort((a, b) => b.change - a.change);
+
+    const riser = shifts[0];
+    const faller = shifts[shifts.length - 1];
+
+    const picks: { genre: string; hook: string }[] = [];
+    if (riser && riser.change > 0) {
+      picks.push({
+        genre: riser.genre,
+        hook: `${riser.genre} rose to #${lateRanks.indexOf(riser.genre) + 1} by ${lastYearShares.year} — biggest riser`,
+      });
+    }
+    if (faller && faller.change < 0 && faller.genre !== riser?.genre) {
+      picks.push({
+        genre: faller.genre,
+        hook: `${faller.genre} fell to #${lateRanks.indexOf(faller.genre) + 1} by ${lastYearShares.year} — biggest decline`,
+      });
+    }
+
+    // Fallback: if no clear riser/faller, just use #1 and #2
+    if (picks.length === 0) {
+      picks.push(
+        { genre: lateRanks[0], hook: `${lateRanks[0]} — #1 genre with ${Math.round(lastYearShares.shares[lateRanks[0]] || 0)}% chart share` },
+        { genre: lateRanks[1], hook: `${lateRanks[1]} — #2 genre with ${Math.round(lastYearShares.shares[lateRanks[1]] || 0)}% chart share` },
+      );
+    } else if (picks.length === 1) {
+      // Add #1 if not already picked
+      const alt = lateRanks.find((g) => g !== picks[0].genre)!;
+      picks.push({ genre: alt, hook: `${alt} — ${Math.round(lastYearShares.shares[alt] || 0)}% chart share in ${lastYearShares.year}` });
+    }
+
+    for (const pick of picks) {
+      const match = allSongs.find(
+        (s) => s.album_img && classifyGenre(s.artist_genres) === pick.genre && !usedIds.has(s.track_id)
+      );
+      if (match) {
+        usedIds.add(match.track_id);
+        genrePulse.push({
+          ...toExemplar(match, pick.hook),
+          category: pick.genre,
+        });
+      }
     }
   }
 
@@ -268,27 +334,6 @@ export async function fetchHomepageData(): Promise<{ exemplars: VizExemplars; pr
     // We don't have per-song audio features in song_summary, so we'll skip this and use weekly_attribute_trends
   }
 
-  // Genre shares by year
-  const genreYearCounts: Record<number, Record<string, number>> = {};
-  for (const s of allSongs) {
-    const yr = parseInt(s.first_week?.slice(0, 4) || "0");
-    if (yr < 2017 || yr > 2021) continue;
-    if (!genreYearCounts[yr]) genreYearCounts[yr] = {};
-    const genre = classifyGenre(s.artist_genres);
-    genreYearCounts[yr][genre] = (genreYearCounts[yr][genre] || 0) + 1;
-  }
-
-  const genreShares = Object.entries(genreYearCounts)
-    .sort(([a], [b]) => Number(a) - Number(b))
-    .map(([year, counts]) => {
-      const total = Object.values(counts).reduce((a, b) => a + b, 0);
-      const shares: Record<string, number> = {};
-      for (const [genre, count] of Object.entries(counts)) {
-        shares[genre] = total > 0 ? (count / total) * 100 : 0;
-      }
-      return { year: Number(year), shares };
-    });
-
   // --- Compute real stats from the dataset ---
 
   // Longevity: median weeks and the spread
@@ -297,12 +342,43 @@ export async function fetchHomepageData(): Promise<{ exemplars: VizExemplars; pr
   // Anatomy: dataset year range (already computed above)
   const anatomyStat = `How hit songs evolved from ${dataMinYear} to ${dataMaxYear}`;
 
-  // Genre: use the top genre data (already computed above for exemplars)
-  const topGenreEntry = topGenres[0];
-  const topGenrePct = topGenreEntry ? Math.round((topGenreEntry[1] / allSongs.length) * 100) : 0;
-  const genreStat = topGenreEntry
-    ? `${topGenreEntry[0]} leads with ${topGenrePct}% of all charting songs`
-    : "Genre distribution across the chart";
+  // Genre: compute ranking shift across years for a compelling subtitle
+  let genreStat = "Genre distribution across the chart";
+  if (genreShares.length >= 2) {
+    const firstYear = genreShares[0];
+    const lastYear = genreShares[genreShares.length - 1];
+
+    // Rank genres by share in first and last year
+    const rankGenres = (shares: Record<string, number>) =>
+      Object.entries(shares).sort((a, b) => b[1] - a[1]).map(([g]) => g);
+
+    const firstRanks = rankGenres(firstYear.shares);
+    const lastRanks = rankGenres(lastYear.shares);
+
+    // Find the biggest riser (improved rank the most)
+    let bestRiser = "";
+    let bestImprovement = 0;
+    for (const genre of lastRanks) {
+      const oldIdx = firstRanks.indexOf(genre);
+      const newIdx = lastRanks.indexOf(genre);
+      if (oldIdx === -1) continue;
+      const improvement = oldIdx - newIdx; // positive = rose in rank
+      if (improvement > bestImprovement) {
+        bestImprovement = improvement;
+        bestRiser = genre;
+      }
+    }
+
+    if (firstRanks[0] !== lastRanks[0]) {
+      genreStat = `${lastRanks[0]} overtook ${firstRanks[0]} as the #1 genre from ${firstYear.year} to ${lastYear.year}`;
+    } else if (bestRiser && bestImprovement > 0) {
+      const lastPct = Math.round(lastYear.shares[bestRiser] || 0);
+      genreStat = `${bestRiser} rose to ${lastPct}% chart share by ${lastYear.year} — the biggest mover across ${genreShares.length} years`;
+    } else {
+      const topPct = Math.round(lastYear.shares[lastRanks[0]] || 0);
+      genreStat = `${lastRanks[0]} dominated with ${topPct}% chart share across ${firstYear.year}–${lastYear.year}`;
+    }
+  }
 
   return {
     exemplars: { longevity, songAnatomy, genrePulse },
