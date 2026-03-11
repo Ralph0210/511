@@ -75,7 +75,7 @@ export default function StickyScrolly({ beats, onBeatChange, children, className
                 activeIndex === i ? "opacity-100" : "opacity-30"
               }`}
             >
-              <div className="rounded-xl bg-[#181818]/90 p-6 shadow-sm backdrop-blur-sm">
+              <div className="rounded-xl bg-surface/90 p-6 shadow-sm backdrop-blur-sm">
                 {beat.text}
               </div>
             </div>

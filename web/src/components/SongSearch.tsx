@@ -86,7 +86,7 @@ export default function SongSearch({ className }: { className?: string }) {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onFocus={() => results.length > 0 && setIsOpen(true)}
-          className="w-full rounded-xl border border-zinc-700 bg-[#181818] py-2.5 pl-10 pr-4 text-sm outline-none transition-colors placeholder:text-zinc-400 focus:border-accent "
+          className="w-full rounded-xl border border-zinc-800 bg-surface py-2.5 pl-10 pr-4 text-sm outline-none transition-colors placeholder:text-zinc-400 focus:border-accent focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:ring-offset-2 focus-visible:ring-offset-[#121212]"
         />
         {loading && (
           <div className="absolute right-3 top-1/2 -translate-y-1/2">
@@ -97,7 +97,7 @@ export default function SongSearch({ className }: { className?: string }) {
 
       {/* Dropdown results */}
       {isOpen && (
-        <div className="absolute left-0 right-0 top-full z-50 mt-1 max-h-80 overflow-y-auto rounded-xl border border-zinc-700 bg-[#181818] shadow-lg">
+        <div className="absolute left-0 right-0 top-full z-50 mt-1 max-h-80 overflow-y-auto rounded-xl border border-zinc-800 bg-surface shadow-lg">
           {results.map((song) => (
             <button
               key={song.track_id}

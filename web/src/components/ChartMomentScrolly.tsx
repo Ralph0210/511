@@ -203,7 +203,7 @@ export default function ChartMomentScrolly({
 
           gDonut.append("text")
             .attr("text-anchor", "middle").attr("dy", "1.3em")
-            .attr("font-size", 11).attr("fill", "#71717a")
+            .attr("font-size", 12).attr("fill", "#71717a")
             .text("of streams");
         }
       }
@@ -487,8 +487,8 @@ export default function ChartMomentScrolly({
   const isGenreBeat = beat >= 2;
 
   return (
-    <div className="rounded-2xl border border-zinc-800 bg-[#181818] p-4">
-      <svg ref={svgRef} className="w-full" />
+    <div className="rounded-2xl border border-zinc-800 bg-surface p-4">
+      <svg ref={svgRef} className="w-full" role="img" aria-label={`Chart showing peer comparison and genre landscape for ${songTrackName}`} />
       <p className="mt-2 text-center text-xs text-muted">
         {isGenreBeat ? (
           <>

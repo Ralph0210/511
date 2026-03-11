@@ -189,27 +189,27 @@ export default function ChartLongevityExplorer({ summaries, initialTrajectories 
       .call(d3.axisBottom(x).ticks(8))
       .call((sel) => sel.select(".domain").attr("stroke", "#3f3f46"))
       .call((sel) => sel.selectAll(".tick line").attr("stroke", "#3f3f46"))
-      .call((sel) => sel.selectAll(".tick text").attr("fill", "#9CA3AF").attr("font-size", 13));
+      .call((sel) => sel.selectAll(".tick text").attr("fill", "#9CA3AF").attr("font-size", 12));
 
     // Y axis
     g.append("g")
       .call(d3.axisLeft(y).ticks(10))
       .call((sel) => sel.select(".domain").attr("stroke", "#3f3f46"))
       .call((sel) => sel.selectAll(".tick line").attr("stroke", "#3f3f46"))
-      .call((sel) => sel.selectAll(".tick text").attr("fill", "#9CA3AF").attr("font-size", 13));
+      .call((sel) => sel.selectAll(".tick text").attr("fill", "#9CA3AF").attr("font-size", 12));
 
     // Axis labels
     g.append("text")
       .attr("x", w / 2).attr("y", h + 44)
       .attr("text-anchor", "middle")
-      .attr("font-size", 14).attr("fill", "#9CA3AF")
+      .attr("font-size", 13).attr("fill", "#71717a")
       .text("Weeks on Chart");
 
     g.append("text")
       .attr("transform", "rotate(-90)")
       .attr("x", -h / 2).attr("y", -44)
       .attr("text-anchor", "middle")
-      .attr("font-size", 14).attr("fill", "#9CA3AF")
+      .attr("font-size", 13).attr("fill", "#71717a")
       .text("Peak Rank (1 = best)");
 
     // Tooltip
@@ -332,12 +332,12 @@ export default function ChartLongevityExplorer({ summaries, initialTrajectories 
       insetG.append("rect")
         .attr("width", insetW).attr("height", insetH)
         .attr("rx", 8)
-        .attr("fill", "#181818").attr("stroke", "#27272a").attr("stroke-width", 1);
+        .attr("fill", "#121212").attr("stroke", "#27272a").attr("stroke-width", 1);
 
       insetG.append("text")
         .attr("x", insetW / 2).attr("y", 14)
         .attr("text-anchor", "middle")
-        .attr("font-size", 10).attr("fill", "#6b7280")
+        .attr("font-size", 12).attr("fill", "#71717a")
         .text("Avg. rank trajectory");
 
       const sparkX = d3.scaleLinear().domain([0, 29]).range([8, insetW - 8]);
@@ -401,10 +401,10 @@ export default function ChartLongevityExplorer({ summaries, initialTrajectories 
           placeholder="Search for a song to highlight..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="w-full rounded-xl border border-zinc-700 bg-[#181818] px-4 py-2.5 text-sm outline-none transition-colors focus:border-accent"
+          className="w-full rounded-xl border border-zinc-800 bg-surface px-4 py-2.5 text-sm outline-none transition-colors focus:border-accent"
         />
         {searchResults.length > 0 && (
-          <div className="absolute left-0 right-0 top-full z-10 mt-1 rounded-xl border border-zinc-700 bg-[#181818] shadow-lg">
+          <div className="absolute left-0 right-0 top-full z-10 mt-1 rounded-xl border border-zinc-800 bg-surface shadow-lg">
             {searchResults.map((s) => (
               <button
                 key={s.track_id}
@@ -497,11 +497,11 @@ export default function ChartLongevityExplorer({ summaries, initialTrajectories 
       )}
 
       {/* Main scatter plot */}
-      <div className="relative rounded-2xl border border-zinc-800 bg-[#181818] p-4">
-        <svg ref={svgRef} className="w-full" />
+      <div className="relative rounded-2xl border border-zinc-800 bg-surface p-4">
+        <svg ref={svgRef} className="w-full" role="img" aria-label="Scatter plot of song longevity: peak rank vs weeks on chart" />
         <div
           ref={tooltipRef}
-          className="pointer-events-none absolute rounded-lg border border-zinc-700 bg-[#1a1a1a] px-3 py-2.5 text-xs shadow-xl opacity-0 transition-opacity"
+          className="pointer-events-none absolute rounded-lg border border-zinc-800 bg-surface px-3 py-2.5 text-xs shadow-xl opacity-0 transition-opacity"
           style={{ maxWidth: 300 }}
         />
       </div>

@@ -21,7 +21,7 @@ export default function VizPreviewCard({
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5 }}
-      className="group rounded-2xl border border-zinc-800 bg-[#181818] p-6 transition-shadow hover:shadow-lg hover:shadow-accent/5"
+      className="group rounded-2xl border border-zinc-800 bg-surface p-6 transition-shadow hover:shadow-lg hover:shadow-accent/5"
     >
       <h3 className="text-lg font-semibold tracking-tight">{title}</h3>
       <p className="mt-1 text-sm text-muted">{subtitle}</p>

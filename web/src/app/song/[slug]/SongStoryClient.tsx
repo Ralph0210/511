@@ -49,7 +49,7 @@ function chapterBeats(chapter: SongStoryChapter): ScrollBeat[] {
 
 function StatCard({ label, value, sub }: { label: string; value: string; sub: string }) {
   return (
-    <div className="rounded-xl border border-zinc-800 bg-[#181818] p-4 text-center">
+    <div className="rounded-xl border border-zinc-800 bg-surface p-4 text-center">
       <p className="text-xs font-medium uppercase tracking-wider text-muted">{label}</p>
       <p className="mt-1 text-2xl font-bold">{value}</p>
       <p className="mt-0.5 text-xs text-muted">{sub}</p>
@@ -242,7 +242,7 @@ export default function SongStoryClient({ trackName, chapters, outro, songData, 
         )}
 
         {/* Narrative conclusion */}
-        <div className="rounded-2xl bg-[#181818] p-8">
+        <div className="rounded-2xl bg-surface p-8">
           <p className="text-base leading-relaxed text-muted">{outro}</p>
         </div>
 
@@ -251,13 +251,13 @@ export default function SongStoryClient({ trackName, chapters, outro, songData, 
           <div>
             <h3 className="text-sm font-semibold">Explore More</h3>
             <div className="mt-3 flex flex-wrap gap-3">
-              <Link href="/explore/longevity" className="rounded-lg bg-[#282828] px-4 py-2 text-sm transition-colors hover:bg-zinc-700">
+              <Link href="/explore/longevity" className="rounded-lg bg-surface-hover px-4 py-2 text-sm transition-colors hover:bg-zinc-700">
                 The Lifespan of a Hit
               </Link>
-              <Link href="/explore/song-anatomy" className="rounded-lg bg-[#282828] px-4 py-2 text-sm transition-colors hover:bg-zinc-700">
+              <Link href="/explore/song-anatomy" className="rounded-lg bg-surface-hover px-4 py-2 text-sm transition-colors hover:bg-zinc-700">
                 Anatomy of a Song
               </Link>
-              <Link href="/explore/genre-pulse" className="rounded-lg bg-[#282828] px-4 py-2 text-sm transition-colors hover:bg-zinc-700">
+              <Link href="/explore/genre-pulse" className="rounded-lg bg-surface-hover px-4 py-2 text-sm transition-colors hover:bg-zinc-700">
                 Genre Pulse
               </Link>
             </div>
@@ -275,7 +275,7 @@ export default function SongStoryClient({ trackName, chapters, outro, songData, 
                     <Link
                       key={peer.track_id}
                       href={`/song/${peer.track_id}`}
-                      className="group flex gap-3 rounded-xl border border-zinc-800 bg-[#181818] p-3 transition-all hover:border-accent/30 hover:shadow-md"
+                      className="group flex gap-3 rounded-xl border border-zinc-800 bg-surface p-3 transition-all hover:border-accent/30 hover:shadow-md"
                     >
                       <div className="h-12 w-12 flex-shrink-0 overflow-hidden rounded-lg bg-zinc-700">
                         {peer.album_img ? (

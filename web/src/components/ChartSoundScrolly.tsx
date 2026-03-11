@@ -92,7 +92,7 @@ export default function ChartSoundScrolly({ songFeatures, eraAverage, songName, 
           .attr("x", Math.cos(angle) * labelR)
           .attr("y", Math.sin(angle) * labelR)
           .attr("text-anchor", "middle").attr("dy", "0.35em")
-          .attr("font-size", 15).attr("fill", "#71717a")
+          .attr("font-size", 14).attr("fill", "#71717a")
           .text(LABELS[feat]);
       });
 
@@ -262,9 +262,9 @@ export default function ChartSoundScrolly({ songFeatures, eraAverage, songName, 
   }, [songFeatures, eraAverage]);
 
   return (
-    <div className="rounded-2xl border border-zinc-800 bg-[#181818] p-4">
+    <div className="rounded-2xl border border-zinc-800 bg-surface p-4">
       <div className="flex justify-center">
-        <svg ref={svgRef} />
+        <svg ref={svgRef} role="img" aria-label={`Radar chart comparing ${songName} audio features against era average`} />
       </div>
       {beat >= 2 && (
         <div className="mt-4 flex justify-center gap-6 text-xs text-muted">

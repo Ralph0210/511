@@ -74,25 +74,25 @@ export default function ChartLifespanScrolly({ data, beat }: Props) {
         .call(d3.axisBottom(x).tickFormat(d3.format("d")).ticks(10))
         .call((sel) => sel.select(".domain").attr("stroke", "#3f3f46"))
         .call((sel) => sel.selectAll(".tick line").attr("stroke", "#3f3f46"))
-        .call((sel) => sel.selectAll(".tick text").attr("fill", "#71717a").attr("font-size", 10));
+        .call((sel) => sel.selectAll(".tick text").attr("fill", "#9CA3AF").attr("font-size", 12));
 
       // Y axis
       g.append("g")
         .call(d3.axisLeft(y).ticks(6))
         .call((sel) => sel.select(".domain").attr("stroke", "#3f3f46"))
         .call((sel) => sel.selectAll(".tick line").attr("stroke", "#3f3f46"))
-        .call((sel) => sel.selectAll(".tick text").attr("fill", "#71717a").attr("font-size", 10));
+        .call((sel) => sel.selectAll(".tick text").attr("fill", "#9CA3AF").attr("font-size", 12));
 
       // Axis labels
       g.append("text")
         .attr("transform", "rotate(-90)")
         .attr("x", -h / 2).attr("y", -40)
-        .attr("text-anchor", "middle").attr("font-size", 11).attr("fill", "#71717a")
+        .attr("text-anchor", "middle").attr("font-size", 13).attr("fill", "#71717a")
         .text("Avg. weeks on chart");
 
       g.append("text")
         .attr("x", w / 2).attr("y", h + 40)
-        .attr("text-anchor", "middle").attr("font-size", 11).attr("fill", "#71717a")
+        .attr("text-anchor", "middle").attr("font-size", 13).attr("fill", "#71717a")
         .text("Debut year");
 
       // Generators
@@ -144,7 +144,7 @@ export default function ChartLifespanScrolly({ data, beat }: Props) {
         g.append("text")
           .attr("class", "era-marker")
           .attr("x", x(year) + 4).attr("y", 12)
-          .attr("font-size", 9).attr("fill", AMBER_DARK).attr("font-weight", 500)
+          .attr("font-size", 12).attr("fill", AMBER_DARK).attr("font-weight", 500)
           .attr("opacity", 0)
           .text(label);
       });
@@ -172,7 +172,7 @@ export default function ChartLifespanScrolly({ data, beat }: Props) {
         g.append("text")
           .attr("class", "pre-avg-label")
           .attr("x", x(1975)).attr("y", y(preAvg) - 8)
-          .attr("text-anchor", "middle").attr("font-size", 10).attr("fill", AMBER_DARK).attr("font-weight", 600)
+          .attr("text-anchor", "middle").attr("font-size", 12).attr("fill", AMBER_DARK).attr("font-weight", 600)
           .attr("opacity", 0)
           .text(`Pre-streaming avg: ${preAvg.toFixed(1)}w`);
 
@@ -187,7 +187,7 @@ export default function ChartLifespanScrolly({ data, beat }: Props) {
           .attr("class", "post-avg-label")
           .attr("x", x(STREAMING_START + (postStreaming[postStreaming.length - 1].debut_year - STREAMING_START) / 2))
           .attr("y", y(postAvg) - 8)
-          .attr("text-anchor", "middle").attr("font-size", 10).attr("fill", AMBER_DARK).attr("font-weight", 600)
+          .attr("text-anchor", "middle").attr("font-size", 12).attr("fill", AMBER_DARK).attr("font-weight", 600)
           .attr("opacity", 0)
           .text(`Streaming avg: ${postAvg.toFixed(1)}w`);
       }
@@ -203,7 +203,7 @@ export default function ChartLifespanScrolly({ data, beat }: Props) {
       g.append("text")
         .attr("class", "peak-label")
         .attr("x", x(peakYear.debut_year)).attr("y", y(peakYear.avg_lifespan) - 14)
-        .attr("text-anchor", "middle").attr("font-size", 11).attr("font-weight", 700).attr("fill", AMBER)
+        .attr("text-anchor", "middle").attr("font-size", 13).attr("font-weight", 700).attr("fill", AMBER)
         .attr("opacity", 0)
         .text(`Peak: ${peakYear.avg_lifespan.toFixed(1)}w (${peakYear.debut_year})`);
 
@@ -219,7 +219,7 @@ export default function ChartLifespanScrolly({ data, beat }: Props) {
       g.append("text")
         .attr("class", "overall-avg-label")
         .attr("x", w - 4).attr("y", y(overallAvg) - 6)
-        .attr("text-anchor", "end").attr("font-size", 9).attr("fill", "#9CA3AF")
+        .attr("text-anchor", "end").attr("font-size", 12).attr("fill", "#9CA3AF")
         .attr("opacity", 0)
         .text(`68-year avg: ${overallAvg.toFixed(1)}w`);
     }
@@ -337,8 +337,8 @@ export default function ChartLifespanScrolly({ data, beat }: Props) {
   }, [data]);
 
   return (
-    <div className="rounded-2xl border border-amber-800/40 bg-[#181818] p-4">
-      <svg ref={svgRef} className="w-full" />
+    <div className="rounded-2xl border border-amber-800/40 bg-surface p-4">
+      <svg ref={svgRef} className="w-full" role="img" aria-label="Chart showing average song lifespan on Billboard Hot 100 over time" />
       <p className="mt-2 text-center text-xs text-amber-400">
         Billboard Hot 100 · Radio + sales + streaming · US chart · Since 1958
       </p>

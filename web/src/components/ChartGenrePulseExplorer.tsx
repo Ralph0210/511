@@ -159,7 +159,7 @@ export default function ChartGenrePulseExplorer({ data }: Props) {
         .call(d3.axisLeft(y).ticks(6).tickFormat((d) => `${d}%`))
         .call((g) => g.select(".domain").attr("stroke", "#3f3f46"))
         .call((g) => g.selectAll(".tick line").attr("stroke", "#3f3f46"))
-        .call((g) => g.selectAll(".tick text").attr("fill", "#6b7280").attr("font-size", 10));
+        .call((g) => g.selectAll(".tick text").attr("fill", "#9CA3AF").attr("font-size", 12));
 
       // X axis
       const tickInterval = Math.max(1, Math.floor(periods.length / 10));
@@ -169,7 +169,7 @@ export default function ChartGenrePulseExplorer({ data }: Props) {
         .call((g) => g.select(".domain").attr("stroke", "#3f3f46"))
         .call((g) => g.selectAll(".tick line").attr("stroke", "#3f3f46"))
         .call((g) =>
-          g.selectAll(".tick text").attr("fill", "#6b7280").attr("font-size", 9).attr("transform", "rotate(-30)").attr("text-anchor", "end")
+          g.selectAll(".tick text").attr("fill", "#9CA3AF").attr("font-size", 12).attr("transform", "rotate(-30)").attr("text-anchor", "end")
         );
 
       // Right-side labels
@@ -179,7 +179,7 @@ export default function ChartGenrePulseExplorer({ data }: Props) {
         const midY = (y(lastPoint[0]) + y(lastPoint[1])) / 2;
         g.append("text")
           .attr("x", w + 8).attr("y", midY)
-          .attr("dy", "0.35em").attr("font-size", 10)
+          .attr("dy", "0.35em").attr("font-size", 12)
           .attr("fill", GENRE_COLORS[s.key] || "#9CA3AF")
           .attr("font-weight", 600)
           .text(s.key);
@@ -201,7 +201,7 @@ export default function ChartGenrePulseExplorer({ data }: Props) {
         ))
         .call((g) => g.select(".domain").attr("stroke", "#3f3f46"))
         .call((g) => g.selectAll(".tick line").attr("stroke", "#3f3f46"))
-        .call((g) => g.selectAll(".tick text").attr("fill", "#6b7280").attr("font-size", 10));
+        .call((g) => g.selectAll(".tick text").attr("fill", "#9CA3AF").attr("font-size", 12));
 
       const tickInterval = Math.max(1, Math.floor(periods.length / 10));
       g.append("g")
@@ -210,7 +210,7 @@ export default function ChartGenrePulseExplorer({ data }: Props) {
         .call((g) => g.select(".domain").attr("stroke", "#3f3f46"))
         .call((g) => g.selectAll(".tick line").attr("stroke", "#3f3f46"))
         .call((g) =>
-          g.selectAll(".tick text").attr("fill", "#6b7280").attr("font-size", 9).attr("transform", "rotate(-30)").attr("text-anchor", "end")
+          g.selectAll(".tick text").attr("fill", "#9CA3AF").attr("font-size", 12).attr("transform", "rotate(-30)").attr("text-anchor", "end")
         );
 
       // Lines
@@ -242,7 +242,7 @@ export default function ChartGenrePulseExplorer({ data }: Props) {
         const last = genreData[genreData.length - 1];
         g.append("text")
           .attr("x", w + 8).attr("y", y(last.value))
-          .attr("dy", "0.35em").attr("font-size", 10)
+          .attr("dy", "0.35em").attr("font-size", 12)
           .attr("fill", GENRE_COLORS[genre] || "#9CA3AF")
           .attr("font-weight", 600)
           .text(genre);
@@ -252,13 +252,13 @@ export default function ChartGenrePulseExplorer({ data }: Props) {
     // Axis labels
     g.append("text")
       .attr("x", w / 2).attr("y", h + 45)
-      .attr("text-anchor", "middle").attr("font-size", 12).attr("fill", "#6b7280")
+      .attr("text-anchor", "middle").attr("font-size", 13).attr("fill", "#71717a")
       .text("Time Period");
 
     g.append("text")
       .attr("transform", "rotate(-90)")
       .attr("x", -h / 2).attr("y", -40)
-      .attr("text-anchor", "middle").attr("font-size", 12).attr("fill", "#6b7280")
+      .attr("text-anchor", "middle").attr("font-size", 13).attr("fill", "#71717a")
       .text(metric === "share" ? "Chart Share (%)" : metric === "avg_rank" ? "Average Rank" : "Average Streams");
   }, [aggregated, periods, selectedGenres, metric]);
 
@@ -341,11 +341,11 @@ export default function ChartGenrePulseExplorer({ data }: Props) {
       </div>
 
       {/* Chart */}
-      <div className="relative rounded-2xl border border-zinc-800 bg-[#181818] p-4">
-        <svg ref={svgRef} className="w-full" />
+      <div className="relative rounded-2xl border border-zinc-800 bg-surface p-4">
+        <svg ref={svgRef} className="w-full" role="img" aria-label="Genre pulse chart showing chart share, rank, or streams over time by genre" />
         <div
           ref={tooltipRef}
-          className="pointer-events-none absolute rounded-lg border border-zinc-700 bg-[#282828] px-3 py-2 text-xs shadow-lg opacity-0 transition-opacity"
+          className="pointer-events-none absolute rounded-lg border border-zinc-800 bg-surface-hover px-3 py-2 text-xs shadow-lg opacity-0 transition-opacity"
           style={{ maxWidth: 200 }}
         />
       </div>

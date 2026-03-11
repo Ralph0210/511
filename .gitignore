@@ -43,3 +43,6 @@ web/.env.local
 
 # CSV data files
 *.csv
+
+*storybook.log
+storybook-static

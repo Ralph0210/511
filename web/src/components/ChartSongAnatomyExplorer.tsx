@@ -124,11 +124,11 @@ export default function ChartSongAnatomyExplorer({ data }: Props) {
       .call(d3.axisBottom(x).ticks(8))
       .call((g) => g.select(".domain").attr("stroke", "#3f3f46"))
       .call((g) => g.selectAll(".tick line").attr("stroke", "#3f3f46"))
-      .call((g) => g.selectAll(".tick text").attr("fill", "#6b7280").attr("font-size", 11));
+      .call((g) => g.selectAll(".tick text").attr("fill", "#9CA3AF").attr("font-size", 12));
 
     g.append("text")
       .attr("x", w / 2).attr("y", h + 40)
-      .attr("text-anchor", "middle").attr("font-size", 12).attr("fill", "#6b7280")
+      .attr("text-anchor", "middle").attr("font-size", 13).attr("fill", "#71717a")
       .text("Date");
 
     // Draw each attribute line with its own y-scale
@@ -148,7 +148,7 @@ export default function ChartSongAnatomyExplorer({ data }: Props) {
           .call(d3.axisLeft(yScale).ticks(6).tickFormat((d) => attrInfo.format(d as number)))
           .call((g) => g.select(".domain").attr("stroke", "#3f3f46"))
           .call((g) => g.selectAll(".tick line").attr("stroke", "#3f3f46"))
-          .call((g) => g.selectAll(".tick text").attr("fill", color).attr("font-size", 10));
+          .call((g) => g.selectAll(".tick text").attr("fill", color).attr("font-size", 12));
       }
 
       // Line
@@ -281,11 +281,11 @@ export default function ChartSongAnatomyExplorer({ data }: Props) {
       </div>
 
       {/* Chart */}
-      <div className="relative rounded-2xl border border-zinc-800 bg-[#181818] p-4">
-        <svg ref={svgRef} className="w-full" />
+      <div className="relative rounded-2xl border border-zinc-800 bg-surface p-4">
+        <svg ref={svgRef} className="w-full" role="img" aria-label="Song anatomy explorer showing audio attributes over time" />
         <div
           ref={tooltipRef}
-          className="pointer-events-none absolute rounded-lg border border-zinc-700 bg-[#282828] px-3 py-2 text-xs shadow-lg opacity-0 transition-opacity"
+          className="pointer-events-none absolute rounded-lg border border-zinc-800 bg-surface-hover px-3 py-2 text-xs shadow-lg opacity-0 transition-opacity"
           style={{ maxWidth: 220 }}
         />
       </div>

@@ -28,6 +28,8 @@ export default function ChartRiseScrolly({ data, peakRank, chartRunInfo, beat }:
   const drawnRef = useRef(false);
   const prevBeatRef = useRef(-2);
 
+  const prevDataRef = useRef<DataPoint[] | null>(null);
+
   const stateRef = useRef<{
     x: d3.ScaleTime<number, number>;
     y: d3.ScaleLinear<number, number>;
@@ -66,6 +68,15 @@ export default function ChartRiseScrolly({ data, peakRank, chartRunInfo, beat }:
   useEffect(() => {
     if (!svgRef.current || !data.length) return;
     const svg = d3.select(svgRef.current);
+
+    // Reset when data changes (new song)
+    if (prevDataRef.current !== data) {
+      prevDataRef.current = data;
+      drawnRef.current = false;
+      prevBeatRef.current = -2;
+      stateRef.current = null;
+    }
+
     const isFirstDraw = !drawnRef.current;
     const prevBeat = prevBeatRef.current;
     prevBeatRef.current = beat;
@@ -88,15 +99,18 @@ export default function ChartRiseScrolly({ data, peakRank, chartRunInfo, beat }:
         .append("rect").attr("x", -2).attr("y", -2).attr("width", w + 4).attr("height", h + 4);
 
       const parseDate = d3.timeParse("%Y-%m-%d");
-      const sorted = [...data].sort((a, b) => a.week.localeCompare(b.week));
+      const sorted = [...data]
+        .map((d) => ({ ...d, streams: d.streams != null ? Number(d.streams) : null }))
+        .sort((a, b) => a.week.localeCompare(b.week));
       const dates = sorted.map((d) => parseDate(d.week)!);
       const xExtent = d3.extent(dates) as [Date, Date];
 
       const yMax = hasReentries ? OFF_CHART_RANK : 200;
       const x = d3.scaleTime().domain(xExtent).range([0, w]);
       const y = d3.scaleLinear().domain([yMax, 1]).range([h, 0]);
-      const maxStreams = d3.max(sorted, (d) => d.streams || 0) || 1;
-      const yStreams = d3.scaleLinear().domain([0, maxStreams]).range([h, h * 0.5]);
+      const numericStreams = sorted.map((d) => d.streams).filter((s): s is number => s != null && s > 0);
+      const maxStreams = numericStreams.length ? Math.max(...numericStreams) : 1;
+      const yStreams = d3.scaleLinear().domain([0, maxStreams]).range([h, h * 0.5]).clamp(true);
 
       // Compute zoom domains around peak
       const peakPoint = sorted.reduce((best, d) => d.rank < best.rank ? d : best);
@@ -181,11 +195,6 @@ export default function ChartRiseScrolly({ data, peakRank, chartRunInfo, beat }:
           const x2 = x(parseDate(firstPt.week)!);
           const gapW = x2 - x1;
 
-          dataG.append("rect").attr("class", "gap-band")
-            .attr("x", x1).attr("y", 0).attr("width", gapW).attr("height", h)
-            .attr("fill", "#FEE2E2").attr("opacity", 0)
-            .attr("data-week1", lastPt.week).attr("data-week2", firstPt.week);
-
           const ld = [
             { px: x1, py: y(lastPt.rank) },
             { px: x1 + gapW * 0.15, py: y(OFF_CHART_RANK) },
@@ -243,10 +252,10 @@ export default function ChartRiseScrolly({ data, peakRank, chartRunInfo, beat }:
         .attr("r", 7).attr("fill", "#1DB954").attr("stroke", "#181818").attr("stroke-width", 2.5).attr("opacity", 0);
       dataG.append("text").attr("class", "rise-peak-label")
         .attr("x", peakX).attr("y", peakY - 18)
-        .attr("text-anchor", "middle").attr("font-size", 15).attr("font-weight", 700).attr("fill", "#1DB954").attr("opacity", 0)
+        .attr("text-anchor", "middle").attr("font-size", 14).attr("font-weight", 700).attr("fill", "#1DB954").attr("opacity", 0)
         .text(`Peak: #${peakPoint.rank}`);
 
-      // Streams bars
+      // Streams bars + right Y-axis
       const hasStreams = sorted.some((d) => d.streams && d.streams > 0);
       if (hasStreams) {
         const barWidth = Math.max(2, w / sorted.length - 1);
@@ -258,6 +267,21 @@ export default function ChartRiseScrolly({ data, peakRank, chartRunInfo, beat }:
           .attr("width", barWidth)
           .attr("height", (d) => h - yStreams(d.streams!))
           .attr("fill", "#F59E0B").attr("opacity", 0);
+
+        // Right Y-axis for streams
+        const fmtStreams = (d: number | d3.NumberValue) => {
+          const v = +d;
+          if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
+          if (v >= 1_000) return `${(v / 1_000).toFixed(0)}K`;
+          return String(v);
+        };
+        g.append("g").attr("class", "y-axis-streams")
+          .attr("transform", `translate(${w},0)`)
+          .call(d3.axisRight(yStreams).ticks(3).tickFormat(fmtStreams as (d: d3.NumberValue) => string))
+          .call((sel) => sel.select(".domain").remove())
+          .call((sel) => sel.selectAll(".tick line").attr("stroke", "#F59E0B").attr("opacity", 0.3))
+          .call((sel) => sel.selectAll(".tick text").attr("fill", "#F59E0B").attr("font-size", 12).attr("opacity", 0.7))
+          .attr("opacity", 0);
 
         g.append("text").attr("class", "stream-label")
           .attr("x", w).attr("y", h + 40)
@@ -353,13 +377,6 @@ export default function ChartRiseScrolly({ data, peakRank, chartRunInfo, beat }:
 
       // Gap indicators
       if (hasReentries) {
-        dataG.selectAll<SVGRectElement, unknown>(".gap-band").each(function () {
-          const el = d3.select(this);
-          const nx1 = x(pd(el.attr("data-week1")!)!);
-          const nx2 = x(pd(el.attr("data-week2")!)!);
-          if (doTransition) el.transition().duration(dur).attr("x", nx1).attr("width", nx2 - nx1);
-          else el.attr("x", nx1).attr("width", nx2 - nx1);
-        });
         dataG.selectAll<SVGPathElement, unknown>(".gap-connector").each(function () {
           const el = d3.select(this);
           const nx1 = x(pd(el.attr("data-week1")!)!);
@@ -415,13 +432,11 @@ export default function ChartRiseScrolly({ data, peakRank, chartRunInfo, beat }:
       });
       if (hasReentries) {
         if (shouldAnimate && prevBeat < 1) {
-          dataG.selectAll(".gap-band").transition().delay(400).duration(400).attr("opacity", 0.3);
           dataG.selectAll(".gap-connector").transition().delay(500).duration(400).attr("opacity", 0.6);
           dataG.selectAll(".gap-label").transition().delay(600).duration(300).attr("opacity", 0.8);
           dataG.selectAll(".reentry-dot").transition().delay(700).duration(300).attr("opacity", 1);
           dataG.selectAll(".reentry-label").transition().delay(800).duration(300).attr("opacity", 1);
         } else {
-          dataG.selectAll(".gap-band").attr("opacity", 0.3);
           dataG.selectAll(".gap-connector").attr("opacity", 0.6);
           dataG.selectAll(".gap-label").attr("opacity", 0.8);
           dataG.selectAll(".reentry-dot").attr("opacity", 1);
@@ -429,7 +444,7 @@ export default function ChartRiseScrolly({ data, peakRank, chartRunInfo, beat }:
         }
       }
     } else {
-      dataG.selectAll(".rise-area, .rise-line, .gap-band, .gap-connector, .gap-label, .reentry-dot, .reentry-label").attr("opacity", 0);
+      dataG.selectAll(".rise-area, .rise-line, .gap-connector, .gap-label, .reentry-dot, .reentry-label").attr("opacity", 0);
     }
 
     if (beat >= 2) {
@@ -449,25 +464,22 @@ export default function ChartRiseScrolly({ data, peakRank, chartRunInfo, beat }:
       if (shouldAnimate && prevBeat < 3) {
         dataG.selectAll(".stream-bar").attr("opacity", 0).transition().duration(400).delay((_, i) => i * 10).attr("opacity", 0.4);
         g.select(".stream-label").attr("opacity", 0).transition().delay(300).duration(300).attr("opacity", 1);
+        g.select(".y-axis-streams").attr("opacity", 0).transition().delay(200).duration(400).attr("opacity", 1);
       } else {
         dataG.selectAll(".stream-bar").attr("opacity", 0.4);
         g.select(".stream-label").attr("opacity", 1);
+        g.select(".y-axis-streams").attr("opacity", 1);
       }
     } else {
       dataG.selectAll(".stream-bar").attr("opacity", 0);
       g.select(".stream-label").attr("opacity", 0);
+      g.select(".y-axis-streams").attr("opacity", 0);
     }
   }, [data, beat, peakRank, runs, hasReentries]);
 
-  useEffect(() => {
-    drawnRef.current = false;
-    prevBeatRef.current = -2;
-    stateRef.current = null;
-  }, [data, peakRank]);
-
   return (
-    <div className="rounded-2xl border border-zinc-800 bg-[#181818] p-4">
-      <svg ref={svgRef} className="w-full" />
+    <div className="rounded-2xl border border-zinc-800 bg-surface p-4">
+      <svg ref={svgRef} className="w-full" role="img" aria-label={`Chart showing rank trajectory with peak at #${peakRank}`} />
       {hasReentries && beat >= 1 && (
         <p className="mt-2 text-center text-xs text-muted">
           <span className="inline-flex items-center gap-1.5">

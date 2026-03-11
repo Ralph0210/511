@@ -100,7 +100,7 @@ export default function ChartStayingPowerScrolly({
           .call(d3.axisBottom(xBand))
           .call((sel) => sel.select(".domain").attr("stroke", "#3f3f46"))
           .call((sel) => sel.selectAll(".tick line").remove())
-          .call((sel) => sel.selectAll(".tick text").attr("fill", "#71717a").attr("font-size", 14));
+          .call((sel) => sel.selectAll(".tick text").attr("fill", "#9CA3AF").attr("font-size", 12));
 
         gSpotify.append("text")
           .attr("x", w / 2).attr("y", h + 40)
@@ -112,7 +112,7 @@ export default function ChartStayingPowerScrolly({
           .call(d3.axisLeft(yHist).ticks(5))
           .call((sel) => sel.select(".domain").attr("stroke", "#3f3f46"))
           .call((sel) => sel.selectAll(".tick line").attr("stroke", "#27272a"))
-          .call((sel) => sel.selectAll(".tick text").attr("fill", "#71717a").attr("font-size", 14));
+          .call((sel) => sel.selectAll(".tick text").attr("fill", "#9CA3AF").attr("font-size", 12));
 
         gSpotify.append("text")
           .attr("transform", "rotate(-90)")
@@ -224,7 +224,7 @@ export default function ChartStayingPowerScrolly({
           .call(d3.axisBottom(xBand))
           .call((sel) => sel.select(".domain").attr("stroke", "#3f3f46"))
           .call((sel) => sel.selectAll(".tick line").remove())
-          .call((sel) => sel.selectAll(".tick text").attr("fill", "#71717a").attr("font-size", 14));
+          .call((sel) => sel.selectAll(".tick text").attr("fill", "#9CA3AF").attr("font-size", 12));
 
         gBillboard.append("text")
           .attr("x", w / 2).attr("y", h + 40)
@@ -236,7 +236,7 @@ export default function ChartStayingPowerScrolly({
           .call(d3.axisLeft(yHist).ticks(5))
           .call((sel) => sel.select(".domain").attr("stroke", "#3f3f46"))
           .call((sel) => sel.selectAll(".tick line").attr("stroke", "#27272a"))
-          .call((sel) => sel.selectAll(".tick text").attr("fill", "#71717a").attr("font-size", 14));
+          .call((sel) => sel.selectAll(".tick text").attr("fill", "#9CA3AF").attr("font-size", 12));
 
         gBillboard.append("text")
           .attr("transform", "rotate(-90)")
@@ -361,8 +361,8 @@ export default function ChartStayingPowerScrolly({
   const isBillboardBeat = beat >= 3 && hasBillboard;
 
   return (
-    <div className={`rounded-2xl border p-4 ${isBillboardBeat ? "border-amber-800/40 bg-[#181818]" : "border-zinc-800 bg-[#181818]"}`}>
-      <svg ref={svgRef} className="w-full" />
+    <div className={`rounded-2xl border p-4 ${isBillboardBeat ? "border-amber-800/40 bg-surface" : "border-zinc-800 bg-surface"}`}>
+      <svg ref={svgRef} className="w-full" role="img" aria-label={`Histogram showing song lifespan of ${songWeeks} weeks compared to distribution`} />
       <p className="mt-2 text-center text-xs text-muted">
         {isBillboardBeat ? (
           <span className="text-amber-400">Billboard Hot 100 · All songs since 1958</span>

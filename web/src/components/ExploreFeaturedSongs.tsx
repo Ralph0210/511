@@ -36,7 +36,7 @@ export default function ExploreFeaturedSongs({ categories }: Props) {
                 <Link
                   key={song.track_id}
                   href={`/song/${song.track_id}`}
-                  className="group flex gap-3 rounded-xl border border-zinc-800 bg-[#181818] p-3 transition-all hover:border-accent/30 hover:shadow-md"
+                  className="group flex gap-3 rounded-xl border border-zinc-800 bg-surface p-3 transition-all hover:border-accent/30 hover:shadow-md"
                 >
                   <div className="h-12 w-12 flex-shrink-0 overflow-hidden rounded-lg bg-zinc-700">
                     {song.album_img ? (

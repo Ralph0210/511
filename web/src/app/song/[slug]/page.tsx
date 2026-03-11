@@ -299,6 +299,7 @@ export default async function SongPage({ params }: { params: Promise<{ slug: str
       </div>
 
       <SongStoryClient
+        key={songData.trackId}
         trackName={trackName}
         chapters={narrative.chapters}
         outro={narrative.outro}
