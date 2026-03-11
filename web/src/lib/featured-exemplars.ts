@@ -288,6 +288,98 @@ export async function fetchGenreExemplars(): Promise<CategorizedExemplars[]> {
     .filter((cat) => cat.songs.length > 0);
 }
 
+// ---------- Bubble explorer data ----------
+
+export type BubbleSong = {
+  track_id: string;
+  track_name: string;
+  artist_name: string;
+  album_img: string | null;
+  weeks_on_chart: number;
+  peak_rank: number;
+  max_streams: number;
+  genre: string;
+  longevity: LongevityCategory;
+  // Audio features (optional — loaded separately for "By Sound" lens)
+  danceability?: number;
+  energy?: number;
+  valence?: number;
+  acousticness?: number;
+};
+
+export async function fetchBubbleData(): Promise<BubbleSong[]> {
+  const allSongs = await fetchAllSongs();
+  // Top 1000 by streams (already sorted desc by max_streams)
+  const top = allSongs.slice(0, 1000);
+
+  return top.map((s) => ({
+    track_id: s.track_id,
+    track_name: s.track_name,
+    artist_name: s.artist_name,
+    album_img: s.album_img,
+    weeks_on_chart: s.weeks_on_chart,
+    peak_rank: s.peak_rank,
+    max_streams: Number(s.max_streams) || 0,
+    genre: classifyGenre(s.artist_genres),
+    longevity: classifySongLongevity(s),
+  }));
+}
+
+/**
+ * Fetch audio features for bubble songs from spotify_top200.
+ * Audio features are track-level (constant across weeks), so we fetch one row per track.
+ * Merges features into the provided BubbleSong array in-place and returns it.
+ */
+export async function fetchBubbleAudioFeatures(songs: BubbleSong[]): Promise<BubbleSong[]> {
+  const supabase = createSupabaseClient();
+  const trackIds = songs.map((s) => s.track_id);
+
+  type AudioRow = {
+    track_id: string;
+    danceability: number | null;
+    energy: number | null;
+    valence: number | null;
+    acousticness: number | null;
+  };
+
+  // Batch in chunks of 100 track IDs. Each track has many weekly rows,
+  // but audio features are constant — we only need one row per track.
+  // We fetch with a generous limit and deduplicate client-side.
+  const CHUNK = 100;
+  const audioMap = new Map<string, AudioRow>();
+
+  for (let i = 0; i < trackIds.length; i += CHUNK) {
+    const chunk = trackIds.slice(i, i + CHUNK);
+    const { data } = await supabase
+      .from("spotify_top200")
+      .select("track_id, danceability, energy, valence, acousticness")
+      .in("track_id", chunk)
+      .eq("pivot", false)
+      .limit(5000);
+
+    if (data) {
+      for (const row of data as AudioRow[]) {
+        if (!audioMap.has(row.track_id)) {
+          audioMap.set(row.track_id, row);
+        }
+      }
+    }
+  }
+
+  // Merge into songs
+  for (const song of songs) {
+    const audio = audioMap.get(song.track_id);
+    if (audio) {
+      song.danceability = audio.danceability != null ? Number(audio.danceability) : undefined;
+      song.energy = audio.energy != null ? Number(audio.energy) : undefined;
+      song.valence = audio.valence != null ? Number(audio.valence) : undefined;
+      song.acousticness = audio.acousticness != null ? Number(audio.acousticness) : undefined;
+    }
+  }
+
+  return songs;
+}
+
 // ---------- Preview attribute trend (fetched separately from weekly_attribute_trends) ----------
 
 export async function fetchAttributePreview(): Promise<PreviewData["attributeTrend"]> {
