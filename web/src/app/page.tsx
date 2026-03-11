@@ -17,9 +17,8 @@ export default async function Home() {
           <span className="text-accent">Spotify Top 200</span>
         </h1>
         <p className="mt-4 max-w-xl text-lg text-muted">
-          {songs.length.toLocaleString()} songs as bubbles — sized by streams,
-          colored by genre. Zoom in to discover album art, click any song to
-          explore its full chart story.
+          {songs.length.toLocaleString()} songs from Spotify Top 200. Click a
+          category to explore its songs — zoom deeper to discover more.
         </p>
         <SongSearch className="mt-6 max-w-md" />
       </div>

@@ -18,30 +18,10 @@ export default function BubbleInsightPanel({ lens, songs }: Props) {
 
   return (
     <div className="mt-4 rounded-xl border border-zinc-800 bg-surface p-4">
-      {lens === "all" && <AllInsight songs={songs} />}
       {lens === "genre" && <GenreInsight songs={songs} />}
       {lens === "longevity" && <LongevityInsight songs={songs} />}
       {lens === "streams" && <StreamsInsight songs={songs} />}
       {lens === "sound" && <SoundInsight songs={songs} />}
-    </div>
-  );
-}
-
-function AllInsight({ songs }: { songs: BubbleSong[] }) {
-  const top = songs[0];
-  return (
-    <div className="flex flex-wrap items-baseline gap-x-6 gap-y-1 text-sm">
-      <span className="text-[#B3B3B3]">
-        <strong className="text-white">{songs.length.toLocaleString()}</strong> songs from Spotify Top 200
-      </span>
-      <span className="text-[#B3B3B3]">
-        Sized by peak weekly streams
-      </span>
-      {top && (
-        <span className="text-[#B3B3B3]">
-          Top song: <strong className="text-white">{top.track_name}</strong> by {top.artist_name}
-        </span>
-      )}
     </div>
   );
 }

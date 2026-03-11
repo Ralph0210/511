@@ -16,11 +16,12 @@ export default function BubbleTooltip({ song, position }: Props) {
 
   return (
     <div
-      className="pointer-events-none absolute z-50 w-56 rounded-xl border border-zinc-800 bg-[#282828] p-3 shadow-lg transition-opacity duration-150"
+      className="pointer-events-none absolute w-56 rounded-xl border border-zinc-800 bg-[#282828] p-3 shadow-lg transition-opacity duration-150"
       style={{
         left: position.x,
         top: position.y,
         transform: "translate(-50%, -100%) translateY(-12px)",
+        zIndex: 99999,
       }}
     >
       <div className="flex gap-3">

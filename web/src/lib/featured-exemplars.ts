@@ -309,10 +309,8 @@ export type BubbleSong = {
 
 export async function fetchBubbleData(): Promise<BubbleSong[]> {
   const allSongs = await fetchAllSongs();
-  // Top 1000 by streams (already sorted desc by max_streams)
-  const top = allSongs.slice(0, 1000);
 
-  return top.map((s) => ({
+  return allSongs.map((s) => ({
     track_id: s.track_id,
     track_name: s.track_name,
     artist_name: s.artist_name,

@@ -1,491 +1,1183 @@
-"use client";
+"use client"
 
-import { useEffect, useRef, useState, useCallback } from "react";
-import * as d3 from "d3";
-import type { BubbleSong } from "@/lib/featured-exemplars";
-import { GENRE_COLORS, LONGEVITY_COLORS } from "@/lib/spotify-data";
-import BubbleTooltip from "./BubbleTooltip";
-import BubbleDetailDrawer from "./BubbleDetailDrawer";
-import BubbleLensSelector, { type LensType } from "./BubbleLensSelector";
-import BubbleInsightPanel from "./BubbleInsightPanel";
+import { useEffect, useRef, useState, useCallback, useMemo } from "react"
+import * as d3 from "d3"
+import type { BubbleSong } from "@/lib/featured-exemplars"
+import {
+  GENRE_COLORS,
+  LONGEVITY_COLORS,
+  LONGEVITY_LABELS,
+} from "@/lib/spotify-data"
+import type { LongevityCategory } from "@/lib/spotify-data"
+import BubbleTooltip from "./BubbleTooltip"
+import BubbleDetailDrawer from "./BubbleDetailDrawer"
+import BubbleLensSelector, {
+  type LensType,
+  type DepthAxisType,
+} from "./BubbleLensSelector"
+import BubbleInsightPanel from "./BubbleInsightPanel"
 
 type Props = {
-  songs: BubbleSong[];
-};
+  songs: BubbleSong[]
+}
 
-// Node type extends BubbleSong with simulation fields
-type BubbleNode = BubbleSong &
-  d3.SimulationNodeDatum & {
-    radius: number;
-  };
+// --- Category type for Level 1 ---
+type Category = {
+  key: string
+  label: string
+  color: string
+  songs: BubbleSong[]
+  exemplar: BubbleSong
+}
 
-const WIDTH = 800;
-const HEIGHT = 600;
-const MARGIN = { top: 28, right: 40, bottom: 28, left: 40 };
-const W = WIDTH - MARGIN.left - MARGIN.right;
-const H = HEIGHT - MARGIN.top - MARGIN.bottom;
+type CategoryNode = Category & d3.SimulationNodeDatum & { radius: number }
 
-// Semantic zoom thresholds
-const ART_THRESHOLD = 16;
-const LABEL_THRESHOLD = 28;
+// --- 3D song node for Level 2 ---
+type Song3D = BubbleSong & {
+  wx: number // world x (from force layout)
+  wy: number // world y
+  wz: number // world z (from depth axis)
+  baseRadius: number
+  // Projected (computed each frame)
+  px: number
+  py: number
+  pr: number
+  visible: boolean
+  imgLoaded: boolean
+  img: HTMLImageElement | null
+  blurCanvas: HTMLCanvasElement | null // pre-rendered blurred album art
+}
+
+const VIEW_W = 800
+const MARGIN = { top: 28, right: 40, bottom: 28, left: 40 }
+
+const FOCAL_LENGTH = 600 // perspective strength for 3D projection
 
 function truncate(text: string, maxLen: number): string {
-  return text.length > maxLen ? text.slice(0, maxLen - 1) + "\u2026" : text;
+  return text.length > maxLen ? text.slice(0, maxLen - 1) + "\u2026" : text
 }
 
-// --- Genre cluster layout (3x3 grid for up to 9 genres) ---
-function computeGenreCenters(songs: BubbleSong[]): Record<string, { x: number; y: number }> {
-  const genres = [...new Set(songs.map((s) => s.genre))];
-  // Sort by count descending so most prominent genres get top-left positions
-  const counts: Record<string, number> = {};
-  for (const s of songs) counts[s.genre] = (counts[s.genre] || 0) + 1;
-  genres.sort((a, b) => (counts[b] || 0) - (counts[a] || 0));
-
-  const cols = Math.min(3, genres.length);
-  const rows = Math.ceil(genres.length / cols);
-  const cellW = W / cols;
-  const cellH = H / rows;
-
-  const centers: Record<string, { x: number; y: number }> = {};
-  genres.forEach((g, i) => {
-    centers[g] = {
-      x: (i % cols + 0.5) * cellW,
-      y: (Math.floor(i / cols) + 0.5) * cellH,
-    };
-  });
-  return centers;
+// Check if point (px,py) is inside a horizontal pill/capsule of size w×h, inset by margin
+function pillContains(
+  px: number,
+  py: number,
+  w: number,
+  h: number,
+  inset = 0,
+): boolean {
+  const r = h / 2 - inset
+  if (r <= 0) return false
+  const hw = Math.max(0, w / 2 - h / 2) // half-width of straight section
+  const dx = Math.abs(px - w / 2) - hw
+  const dy = py - h / 2
+  if (dx <= 0) return Math.abs(dy) <= r
+  return dx * dx + dy * dy <= r * r
 }
 
-// --- Longevity column positions ---
-const LONGEVITY_COLUMNS: Record<string, number> = {
-  viral: W * 0.2,
-  sustained: W * 0.5,
-  slow_burn: W * 0.8,
-  other: W * 0.5, // "other" goes to center
-};
-
-// Color function per lens
-function getBubbleColor(d: BubbleNode, lens: LensType): string {
-  if (lens === "longevity") return LONGEVITY_COLORS[d.longevity] || "#52525b";
-  if (lens === "streams") return "#1DB954";
-  return GENRE_COLORS[d.genre] || "#9CA3AF";
+// Scale point toward center of pill until it's inside (with margin)
+function clampToPillCenter(
+  px: number,
+  py: number,
+  w: number,
+  h: number,
+  inset = 0,
+): [number, number] {
+  if (pillContains(px, py, w, h, inset)) return [px, py]
+  const cx = w / 2
+  const cy = h / 2
+  let lo = 0
+  let hi = 1
+  for (let i = 0; i < 20; i++) {
+    const mid = (lo + hi) / 2
+    if (pillContains(cx + (px - cx) * mid, cy + (py - cy) * mid, w, h, inset))
+      lo = mid
+    else hi = mid
+  }
+  return [cx + (px - cx) * lo, cy + (py - cy) * lo]
 }
+
+// --- Build categories for each lens ---
+function getCategoriesForLens(lens: LensType, songs: BubbleSong[]): Category[] {
+  const groupBy = (
+    keyFn: (s: BubbleSong) => string,
+    colorFn: (key: string) => string,
+    labelFn?: (key: string) => string,
+  ) => {
+    const groups: Record<string, BubbleSong[]> = {}
+    for (const s of songs) {
+      const k = keyFn(s)
+      if (!groups[k]) groups[k] = []
+      groups[k].push(s)
+    }
+    return Object.entries(groups)
+      .filter(([, arr]) => arr.length >= 3)
+      .sort((a, b) => b[1].length - a[1].length)
+      .map(([key, arr]) => {
+        const sorted = [...arr].sort((a, b) => b.max_streams - a.max_streams)
+        return {
+          key,
+          label: labelFn ? labelFn(key) : key,
+          color: colorFn(key),
+          songs: sorted,
+          exemplar: sorted[0],
+        }
+      })
+  }
+
+  switch (lens) {
+    case "genre":
+      return groupBy(
+        (s) => s.genre,
+        (k) => GENRE_COLORS[k] || "#9CA3AF",
+      )
+    case "longevity":
+      return groupBy(
+        (s) => s.longevity,
+        (k) => LONGEVITY_COLORS[k as LongevityCategory] || "#52525b",
+        (k) => LONGEVITY_LABELS[k as LongevityCategory] || k,
+      )
+    case "streams": {
+      const tiers = [
+        {
+          key: "50m+",
+          label: "50M+ Streams",
+          min: 50_000_000,
+          max: Infinity,
+          color: "#1DB954",
+        },
+        {
+          key: "20-50m",
+          label: "20-50M Streams",
+          min: 20_000_000,
+          max: 50_000_000,
+          color: "#16a34a",
+        },
+        {
+          key: "5-20m",
+          label: "5-20M Streams",
+          min: 5_000_000,
+          max: 20_000_000,
+          color: "#3B82F6",
+        },
+        {
+          key: "1-5m",
+          label: "1-5M Streams",
+          min: 1_000_000,
+          max: 5_000_000,
+          color: "#8B5CF6",
+        },
+        {
+          key: "<1m",
+          label: "<1M Streams",
+          min: 0,
+          max: 1_000_000,
+          color: "#6B7280",
+        },
+      ]
+      return tiers
+        .map((t) => {
+          const tierSongs = songs
+            .filter((s) => s.max_streams >= t.min && s.max_streams < t.max)
+            .sort((a, b) => b.max_streams - a.max_streams)
+          if (tierSongs.length < 3) return null
+          return {
+            key: t.key,
+            label: t.label,
+            color: t.color,
+            songs: tierSongs,
+            exemplar: tierSongs[0],
+          }
+        })
+        .filter((c): c is Category => c !== null)
+    }
+    case "sound": {
+      const quadrants = [
+        {
+          key: "high-e-happy",
+          label: "Intense & Happy",
+          eMin: 0.5,
+          eMax: 1,
+          vMin: 0.5,
+          vMax: 1,
+          color: "#F59E0B",
+        },
+        {
+          key: "high-e-sad",
+          label: "Intense & Melancholy",
+          eMin: 0.5,
+          eMax: 1,
+          vMin: 0,
+          vMax: 0.5,
+          color: "#EF4444",
+        },
+        {
+          key: "low-e-happy",
+          label: "Chill & Happy",
+          eMin: 0,
+          eMax: 0.5,
+          vMin: 0.5,
+          vMax: 1,
+          color: "#1DB954",
+        },
+        {
+          key: "low-e-sad",
+          label: "Chill & Melancholy",
+          eMin: 0,
+          eMax: 0.5,
+          vMin: 0,
+          vMax: 0.5,
+          color: "#3B82F6",
+        },
+      ]
+      return quadrants
+        .map((q) => {
+          const qSongs = songs
+            .filter(
+              (s) =>
+                s.energy != null &&
+                s.valence != null &&
+                s.energy >= q.eMin &&
+                s.energy < q.eMax &&
+                s.valence >= q.vMin &&
+                s.valence < q.vMax,
+            )
+            .sort((a, b) => b.max_streams - a.max_streams)
+          if (qSongs.length < 3) return null
+          return {
+            key: q.key,
+            label: q.label,
+            color: q.color,
+            songs: qSongs,
+            exemplar: qSongs[0],
+          }
+        })
+        .filter((c): c is Category => c !== null)
+    }
+  }
+}
+
+// --- Depth axis value extractor ---
+function depthValue(song: BubbleSong, axis: DepthAxisType): number {
+  switch (axis) {
+    case "streams":
+      return song.max_streams
+    case "weeks":
+      return song.weeks_on_chart
+    case "peak":
+      return 201 - song.peak_rank
+  }
+}
+
+// ============================================================
+// Main Component
+// ============================================================
 
 export default function BubbleExplorer({ songs }: Props) {
-  const svgRef = useRef<SVGSVGElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const simulationRef = useRef<d3.Simulation<BubbleNode, undefined> | null>(null);
-  const nodesRef = useRef<BubbleNode[]>([]);
-  const circlesRef = useRef<d3.Selection<SVGCircleElement, BubbleNode, SVGGElement, unknown> | null>(null);
-  const labelsGroupRef = useRef<d3.Selection<SVGGElement, unknown, null, undefined> | null>(null);
+  const svgRef = useRef<SVGSVGElement>(null)
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const chartWrapRef = useRef<HTMLDivElement>(null)
+  const labelOverlayRef = useRef<HTMLDivElement>(null)
 
   // State
-  const [activeLens, setActiveLens] = useState<LensType>("all");
-  const [hoveredSong, setHoveredSong] = useState<BubbleSong | null>(null);
-  const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
-  const [selectedSong, setSelectedSong] = useState<BubbleSong | null>(null);
+  const [activeLens, setActiveLens] = useState<LensType>("genre")
+  const [activeCategory, setActiveCategory] = useState<string | null>(null)
+  const [depthAxis, setDepthAxis] = useState<DepthAxisType>("streams")
+  const [hoveredSong, setHoveredSong] = useState<BubbleSong | null>(null)
+  const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 })
+  const [selectedSong, setSelectedSong] = useState<BubbleSong | null>(null)
 
-  const handleCloseDrawer = useCallback(() => setSelectedSong(null), []);
+  const handleCloseDrawer = useCallback(() => setSelectedSong(null), [])
 
-  // --- Main setup effect ---
+  const categories = useMemo(
+    () => getCategoriesForLens(activeLens, songs),
+    [activeLens, songs],
+  )
+
+  const categorySongs = useMemo(() => {
+    if (!activeCategory) return []
+    const cat = categories.find((c) => c.key === activeCategory)
+    return cat ? cat.songs : []
+  }, [activeCategory, categories])
+
+  const handleLensChange = useCallback((lens: LensType) => {
+    setActiveLens(lens)
+    setActiveCategory(null)
+    setHoveredSong(null)
+    setSelectedSong(null)
+  }, [])
+
+  const handleBack = useCallback(() => {
+    setActiveCategory(null)
+    setHoveredSong(null)
+    setSelectedSong(null)
+  }, [])
+
+  // ============================================================
+  // LEVEL 1: Category bubbles (SVG)
+  // ============================================================
   useEffect(() => {
-    if (!svgRef.current || !songs.length) return;
+    if (activeCategory !== null) return
+    if (!svgRef.current || !chartWrapRef.current || !categories.length) return
 
-    const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const isTouch = "ontouchstart" in window;
+    const wrapRect = chartWrapRef.current.getBoundingClientRect()
+    const containerW = wrapRect.width
+    const containerH = wrapRect.height
+    const aspect = containerH / containerW
+    const WIDTH = VIEW_W
+    const HEIGHT = Math.round(VIEW_W * aspect)
+    const W = WIDTH - MARGIN.left - MARGIN.right
+    const H = HEIGHT - MARGIN.top - MARGIN.bottom
 
-    const svg = d3.select(svgRef.current);
-    svg.selectAll("*").remove();
-
+    const svg = d3.select(svgRef.current)
+    svg.selectAll("*").remove()
     svg
       .attr("viewBox", `0 0 ${WIDTH} ${HEIGHT}`)
       .attr("preserveAspectRatio", "xMidYMid meet")
       .style("width", "100%")
-      .style("height", "auto");
-
-    const defs = svg.append("defs");
-    defs
-      .append("clipPath")
-      .attr("id", "bubble-clip")
-      .append("rect")
-      .attr("width", W)
-      .attr("height", H);
+      .style("height", "100%")
 
     const g = svg
       .append("g")
-      .attr("transform", `translate(${MARGIN.left},${MARGIN.top})`);
+      .attr("transform", `translate(${MARGIN.left},${MARGIN.top})`)
 
-    const zoomGroup = g.append("g").attr("clip-path", "url(#bubble-clip)");
-    const dataGroup = zoomGroup.append("g");
-
-    // Lens label layer (outside clip for genre/longevity labels)
-    const lensLabelGroup = g.append("g").attr("class", "lens-labels");
-    labelsGroupRef.current = lensLabelGroup;
-
-    // Radius scale
-    const streamExtent = d3.extent(songs, (d) => d.max_streams) as [number, number];
+    const countExtent = d3.extent(categories, (c) => c.songs.length) as [
+      number,
+      number,
+    ]
     const r = d3
       .scaleSqrt()
-      .domain([Math.max(1, streamExtent[0]), streamExtent[1]])
-      .range([2, 24])
-      .clamp(true);
+      .domain([Math.max(1, countExtent[0]), countExtent[1]])
+      .range([Math.min(40, W / 10), Math.min(100, W / 5)])
+      .clamp(true)
 
-    // Create nodes
-    const seededRandom = d3.randomLcg(42);
-    const nodes: BubbleNode[] = songs.map((song) => ({
-      ...song,
-      x: W / 2 + (seededRandom() - 0.5) * W * 0.6,
-      y: H / 2 + (seededRandom() - 0.5) * H * 0.6,
-      radius: r(song.max_streams),
-    }));
-    nodesRef.current = nodes;
+    const nodes: CategoryNode[] = categories.map((cat, i) => ({
+      ...cat,
+      x: W / 2 + Math.cos((2 * Math.PI * i) / categories.length) * W * 0.2,
+      y: H / 2 + Math.sin((2 * Math.PI * i) / categories.length) * H * 0.2,
+      radius: r(cat.songs.length),
+    }))
 
-    // Render circles
-    const circles = dataGroup
-      .selectAll<SVGCircleElement, BubbleNode>("circle")
+    const defs = svg.append("defs")
+    for (const node of nodes) {
+      defs
+        .append("clipPath")
+        .attr("id", `cat-clip-${node.key}`)
+        .append("circle")
+        .attr("r", node.radius)
+    }
+
+    const bubbleGroups = g
+      .selectAll<SVGGElement, CategoryNode>(".cat-bubble")
       .data(nodes)
-      .join("circle")
-      .attr("cx", (d) => d.x!)
-      .attr("cy", (d) => d.y!)
+      .join("g")
+      .attr("class", "cat-bubble")
+      .style("cursor", "pointer")
+
+    bubbleGroups
+      .append("image")
+      .attr("href", (d) => d.exemplar.album_img || "")
+      .attr("width", (d) => d.radius * 2)
+      .attr("height", (d) => d.radius * 2)
+      .attr("x", (d) => -d.radius)
+      .attr("y", (d) => -d.radius)
+      .attr("clip-path", (d) => `url(#cat-clip-${d.key})`)
+      .attr("preserveAspectRatio", "xMidYMid slice")
+
+    bubbleGroups
+      .append("circle")
       .attr("r", (d) => d.radius)
-      .attr("fill", (d) => GENRE_COLORS[d.genre] || "#9CA3AF")
-      .attr("opacity", 0.7)
-      .attr("stroke", "none")
-      .style("cursor", "pointer");
-    circlesRef.current = circles;
+      .attr("fill", (d) => d.color)
+      .attr("opacity", 0.45)
 
-    // --- Interaction ---
-    let currentTransform = d3.zoomIdentity;
+    bubbleGroups
+      .append("circle")
+      .attr("class", "ring")
+      .attr("r", (d) => d.radius)
+      .attr("fill", "none")
+      .attr("stroke", (d) => d.color)
+      .attr("stroke-width", 3)
+      .attr("opacity", 0.8)
 
-    if (!isTouch) {
-      // Desktop: hover for tooltip, click for drawer
-      circles
-        .on("mouseenter", function (_event: MouseEvent, d: BubbleNode) {
-          d3.select(this)
-            .attr("opacity", 1)
-            .attr("stroke", "#fff")
-            .attr("stroke-width", 2);
+    bubbleGroups
+      .append("text")
+      .attr("text-anchor", "middle")
+      .attr("dy", "-0.3em")
+      .attr("fill", "#fff")
+      .attr("font-size", (d) => Math.max(12, Math.min(18, d.radius / 3.5)))
+      .attr("font-weight", 700)
+      .attr("pointer-events", "none")
+      .text((d) => d.label)
 
-          const svgEl = svgRef.current!;
-          const containerEl = containerRef.current!;
-          const svgRect = svgEl.getBoundingClientRect();
-          const containerRect = containerEl.getBoundingClientRect();
-          const scaleX = svgRect.width / WIDTH;
-          const scaleY = svgRect.height / HEIGHT;
-          const tx = currentTransform.applyX(d.x!);
-          const ty = currentTransform.applyY(d.y!);
-          const screenX = (MARGIN.left + tx) * scaleX + svgRect.left - containerRect.left;
-          const screenY = (MARGIN.top + ty) * scaleY + svgRect.top - containerRect.top;
+    bubbleGroups
+      .append("text")
+      .attr("text-anchor", "middle")
+      .attr("dy", "1.2em")
+      .attr("fill", "#B3B3B3")
+      .attr("font-size", (d) => Math.max(10, Math.min(13, d.radius / 4.5)))
+      .attr("font-weight", 500)
+      .attr("pointer-events", "none")
+      .text((d) => `${d.songs.length} songs`)
 
-          setHoveredSong(d);
-          setTooltipPos({ x: screenX, y: screenY });
-        })
-        .on("mouseleave", function () {
-          d3.select(this).attr("opacity", 0.7).attr("stroke", "none");
-          setHoveredSong(null);
-        })
-        .on("click", (_event: MouseEvent, d: BubbleNode) => {
-          setSelectedSong(d);
-          setHoveredSong(null);
-        });
-    } else {
-      // Touch: tap opens drawer directly (no hover on touch devices)
-      circles.on("click", (_event: MouseEvent, d: BubbleNode) => {
-        setSelectedSong(d);
-      });
-    }
+    bubbleGroups
+      .on("mouseenter", function () {
+        d3.select(this)
+          .select(".ring")
+          .transition()
+          .duration(150)
+          .attr("stroke-width", 5)
+          .attr("opacity", 1)
+        d3.select(this)
+          .transition()
+          .duration(150)
+          .attr("transform", function () {
+            const d = d3.select(this).datum() as CategoryNode
+            return `translate(${d.x},${d.y}) scale(1.06)`
+          })
+      })
+      .on("mouseleave", function () {
+        d3.select(this)
+          .select(".ring")
+          .transition()
+          .duration(150)
+          .attr("stroke-width", 3)
+          .attr("opacity", 0.8)
+        d3.select(this)
+          .transition()
+          .duration(150)
+          .attr("transform", function () {
+            const d = d3.select(this).datum() as CategoryNode
+            return `translate(${d.x},${d.y}) scale(1)`
+          })
+      })
+      .on("click", (_event: MouseEvent, d: CategoryNode) => {
+        setActiveCategory(d.key)
+      })
 
-    // Art layer for semantic zoom
-    const artGroup = dataGroup.append("g").attr("class", "art-layer");
-
-    let semanticTimer: ReturnType<typeof setTimeout> | null = null;
-
-    function updateSemanticZoom(k: number) {
-      const artVisible = nodes.filter(
-        (d) => d.radius * k >= ART_THRESHOLD && d.album_img
-      );
-      const artSel = artGroup
-        .selectAll<SVGGElement, BubbleNode>(".bubble-art")
-        .data(artVisible, (d) => d.track_id);
-      artSel.exit().remove();
-
-      artSel
-        .enter()
-        .append("g")
-        .attr("class", "bubble-art")
-        .attr("pointer-events", "none")
-        .each(function (d) {
-          const clipId = `art-clip-${d.track_id}`;
-          const group = d3.select(this);
-          group.append("clipPath").attr("id", clipId).append("circle").attr("r", d.radius);
-          group
-            .append("image")
-            .attr("href", d.album_img!)
-            .attr("width", d.radius * 2)
-            .attr("height", d.radius * 2)
-            .attr("x", -d.radius)
-            .attr("y", -d.radius)
-            .attr("clip-path", `url(#${clipId})`)
-            .attr("preserveAspectRatio", "xMidYMid slice");
-        });
-
-      artGroup
-        .selectAll<SVGGElement, BubbleNode>(".bubble-art")
-        .attr("transform", (d) => `translate(${d.x},${d.y})`);
-
-      const labelVisible = nodes.filter((d) => d.radius * k >= LABEL_THRESHOLD);
-      const labelSel = artGroup
-        .selectAll<SVGTextElement, BubbleNode>(".bubble-label")
-        .data(labelVisible, (d) => d.track_id);
-      labelSel.exit().remove();
-
-      labelSel
-        .enter()
-        .append("text")
-        .attr("class", "bubble-label")
-        .attr("text-anchor", "middle")
-        .attr("fill", "#fff")
-        .attr("font-size", 12 / k)
-        .attr("font-weight", 600)
-        .attr("dy", (d) => d.radius + 12 / k)
-        .attr("pointer-events", "none")
-        .text((d) => truncate(d.track_name, 18));
-
-      artGroup
-        .selectAll<SVGTextElement, BubbleNode>(".bubble-label")
-        .attr("x", (d) => d.x!)
-        .attr("y", (d) => d.y!)
-        .attr("font-size", 12 / k)
-        .attr("dy", (d) => d.radius + 12 / k);
-    }
-
-    // Zoom
-    const zoom = d3
-      .zoom<SVGSVGElement, unknown>()
-      .scaleExtent([1, 8])
-      .translateExtent([[0, 0], [W, H]])
-      .on("zoom", (event: d3.D3ZoomEvent<SVGSVGElement, unknown>) => {
-        currentTransform = event.transform;
-        dataGroup.attr("transform", event.transform.toString());
-        if (semanticTimer) clearTimeout(semanticTimer);
-        semanticTimer = setTimeout(() => updateSemanticZoom(event.transform.k), 80);
-      });
-
-    svg.call(zoom);
-
-    // Force simulation
     const simulation = d3
-      .forceSimulation<BubbleNode>(nodes)
-      .force("center", d3.forceCenter<BubbleNode>(W / 2, H / 2).strength(0.05))
-      .force("collide", d3.forceCollide<BubbleNode>((d) => d.radius + 1).iterations(2))
-      .force("charge", d3.forceManyBody<BubbleNode>().strength(-2))
-      .force("x", null)
-      .force("y", null)
-      .alphaDecay(0.02);
+      .forceSimulation<CategoryNode>(nodes)
+      .force("center", d3.forceCenter<CategoryNode>(W / 2, H / 2))
+      .force(
+        "collide",
+        d3.forceCollide<CategoryNode>((d) => d.radius + 16).iterations(3),
+      )
+      .force("charge", d3.forceManyBody<CategoryNode>().strength(-80))
 
-    if (prefersReducedMotion) {
-      // Run simulation to completion without animation
-      simulation.stop();
-      for (let i = 0; i < 300; i++) simulation.tick();
-      for (const d of nodes) {
-        d.x = Math.max(d.radius, Math.min(W - d.radius, d.x!));
-        d.y = Math.max(d.radius, Math.min(H - d.radius, d.y!));
-      }
-      circles.attr("cx", (d) => d.x!).attr("cy", (d) => d.y!);
-    } else {
-      simulation.on("tick", () => {
-        for (const d of nodes) {
-          d.x = Math.max(d.radius, Math.min(W - d.radius, d.x!));
-          d.y = Math.max(d.radius, Math.min(H - d.radius, d.y!));
-        }
-        circles.attr("cx", (d) => d.x!).attr("cy", (d) => d.y!);
-        artGroup
-          .selectAll<SVGGElement, BubbleNode>(".bubble-art")
-          .attr("transform", (d) => `translate(${d.x},${d.y})`);
-        artGroup
-          .selectAll<SVGTextElement, BubbleNode>(".bubble-label")
-          .attr("x", (d) => d.x!)
-          .attr("y", (d) => d.y!);
-      });
+    simulation.stop()
+    for (let i = 0; i < 200; i++) simulation.tick()
+    for (const d of nodes) {
+      // Clamp to pill shape of the viewBox
+      const [cx, cy] = clampToPillCenter(d.x!, d.y!, W, H, d.radius + 4)
+      d.x = cx
+      d.y = cy
     }
-
-    simulationRef.current = simulation;
+    bubbleGroups.attr("transform", (d) => `translate(${d.x},${d.y})`)
 
     return () => {
-      simulation.stop();
-      simulationRef.current = null;
-      if (semanticTimer) clearTimeout(semanticTimer);
-    };
-  }, [songs]);
+      simulation.stop()
+    }
+  }, [categories, activeCategory])
 
-  // --- Lens switching effect ---
+  // ============================================================
+  // LEVEL 2: DNA single-strand helix (Canvas 2D)
+  // ============================================================
   useEffect(() => {
-    const simulation = simulationRef.current;
-    const circles = circlesRef.current;
-    const nodes = nodesRef.current;
-    const lensLabels = labelsGroupRef.current;
-    if (!simulation || !circles || !nodes.length || !lensLabels) return;
+    if (activeCategory === null) return
+    if (!canvasRef.current || !chartWrapRef.current || !categorySongs.length)
+      return
+    const canvas = canvasRef.current
+    const wrap = chartWrapRef.current
 
-    // Clear lens labels
-    lensLabels.selectAll("*").remove();
+    const cat = categories.find((c) => c.key === activeCategory)
+    const catColor = cat?.color || "#9CA3AF"
 
-    // Update circle colors
-    circles
-      .transition()
-      .duration(500)
-      .attr("fill", (d) => getBubbleColor(d, activeLens));
+    const rect = wrap.getBoundingClientRect()
+    const cw = rect.width
+    const ch = rect.height
+    const dpr = window.devicePixelRatio || 1
+    canvas.width = cw * dpr
+    canvas.height = ch * dpr
+    canvas.style.width = `${cw}px`
+    canvas.style.height = `${ch}px`
 
-    // Streams scale for beeswarm lens
-    const streamExtent = d3.extent(nodes, (d) => d.max_streams) as [number, number];
-    const streamsY = d3
-      .scaleLog()
-      .domain([Math.max(1, streamExtent[0]), streamExtent[1]])
-      .range([H - 20, 20])
-      .clamp(true);
+    const ctx = canvas.getContext("2d")!
+    ctx.scale(dpr, dpr)
 
-    // Reconfigure forces based on lens
-    switch (activeLens) {
-      case "all":
-        simulation
-          .force("center", d3.forceCenter<BubbleNode>(W / 2, H / 2).strength(0.05))
-          .force("x", null)
-          .force("y", null);
-        break;
+    const centerX = cw / 2
+    const centerY = ch / 2
 
-      case "genre": {
-        const centers = computeGenreCenters(songs);
-        simulation
-          .force("center", null)
-          .force("x", d3.forceX<BubbleNode>((d) => centers[d.genre]?.x ?? W / 2).strength(0.15))
-          .force("y", d3.forceY<BubbleNode>((d) => centers[d.genre]?.y ?? H / 2).strength(0.15));
+    // --- Helix geometry ---
+    // Songs sorted by metric (highest first = position 0 on helix)
+    const sortedSongs = [...categorySongs].sort(
+      (a, b) => depthValue(b, depthAxis) - depthValue(a, depthAxis),
+    )
+    const N = sortedSongs.length
 
-        // Add genre labels
-        for (const [genre, pos] of Object.entries(centers)) {
-          lensLabels
-            .append("text")
-            .attr("x", pos.x)
-            .attr("y", pos.y - H / 6 + 8)
-            .attr("text-anchor", "middle")
-            .attr("font-size", 13)
-            .attr("font-weight", 600)
-            .attr("fill", GENRE_COLORS[genre] || "#9CA3AF")
-            .attr("opacity", 0.8)
-            .text(genre);
-        }
-        break;
+    // Radius scale: bubble size proportional to sqrt of metric value
+    const values = sortedSongs.map((s) => depthValue(s, depthAxis))
+    const maxVal = Math.max(1, values[0])
+    const minVal = Math.max(1, values[N - 1])
+    const rScale = d3
+      .scaleSqrt()
+      .domain([minVal, maxVal])
+      .range([6, 45])
+      .clamp(true)
+
+    // Helix parameters — camera looks down the helix axis (Z)
+    // Bubbles orbit in X/Y, Z position reflects the chosen depth metric
+    const HELIX_RADIUS = Math.min(cw, ch) * 0.28
+    const TURNS = Math.max(3, N / 12)
+    const HELIX_LENGTH = N * 50
+
+    // Map metric value → Z position (highest value = nearest, lowest = farthest)
+    const zScale = d3
+      .scaleLinear()
+      .domain([maxVal, minVal]) // high metric → low Z (close), low metric → high Z (far)
+      .range([0, HELIX_LENGTH])
+      .clamp(true)
+
+    const nodes: Song3D[] = sortedSongs.map((song, i) => {
+      const t = i / Math.max(1, N - 1) // 0..1 for helix angle
+      const angle = t * TURNS * 2 * Math.PI
+      const wx = Math.cos(angle) * HELIX_RADIUS
+      const wy = Math.sin(angle) * HELIX_RADIUS
+      const wz = zScale(depthValue(song, depthAxis)) // Z from metric value
+
+      return {
+        ...song,
+        wx,
+        wy,
+        wz,
+        baseRadius: rScale(depthValue(song, depthAxis)),
+        px: 0,
+        py: 0,
+        pr: 0,
+        visible: false,
+        imgLoaded: false,
+        img: null,
+        blurCanvas: null,
       }
+    })
 
-      case "longevity":
-        simulation
-          .force("center", null)
-          .force("x", d3.forceX<BubbleNode>((d) => LONGEVITY_COLUMNS[d.longevity] ?? W / 2).strength(0.15))
-          .force("y", d3.forceY<BubbleNode>(H / 2).strength(0.03));
+    // Preload album art — largest bubbles first
+    const withArt = [...nodes]
+      .filter((n) => n.album_img)
+      .sort((a, b) => b.baseRadius - a.baseRadius)
 
-        // Column headers
-        const longevityHeaders: { key: string; label: string; x: number }[] = [
-          { key: "viral", label: "Viral Spike", x: LONGEVITY_COLUMNS.viral },
-          { key: "sustained", label: "Sustained Hit", x: LONGEVITY_COLUMNS.sustained },
-          { key: "slow_burn", label: "Slow Burn", x: LONGEVITY_COLUMNS.slow_burn },
-        ];
-        for (const h of longevityHeaders) {
-          lensLabels
-            .append("text")
-            .attr("x", h.x)
-            .attr("y", 16)
-            .attr("text-anchor", "middle")
-            .attr("font-size", 13)
-            .attr("font-weight", 600)
-            .attr("fill", LONGEVITY_COLORS[h.key as keyof typeof LONGEVITY_COLORS] || "#9CA3AF")
-            .text(h.label);
+    function loadImage(node: Song3D) {
+      const img = new Image()
+      img.crossOrigin = "anonymous"
+      img.onload = () => {
+        node.img = img
+        node.imgLoaded = true
+        const size = 128
+        const off = document.createElement("canvas")
+        off.width = size
+        off.height = size
+        const offCtx = off.getContext("2d")!
+        offCtx.filter = "blur(16px)"
+        offCtx.drawImage(img, -20, -20, size + 40, size + 40)
+        offCtx.filter = "none"
+        node.blurCanvas = off
+      }
+      img.src = node.album_img!
+    }
+
+    const immediate = withArt.slice(0, 80)
+    const deferred = withArt.slice(80)
+    for (const node of immediate) loadImage(node)
+
+    const batchTimers: ReturnType<typeof setTimeout>[] = []
+    const BATCH_SIZE = 40
+    for (let i = 0; i < deferred.length; i += BATCH_SIZE) {
+      const batch = deferred.slice(i, i + BATCH_SIZE)
+      const timer = setTimeout(() => {
+        for (const node of batch) loadImage(node)
+      }, 500 + (i / BATCH_SIZE) * 300)
+      batchTimers.push(timer)
+    }
+
+    // Camera state: scroll advances along Z (helix axis), drag pans X/Y
+    let cameraZ = -200 // camera Z position — starts just before helix
+    let targetCameraZ = -200
+    let panX = 0 // lateral pan (drag)
+    let targetPanX = 0
+    let panY = 0
+    let targetPanY = 0
+    let animFrameId = 0
+    let hoveredNode: Song3D | null = null
+    let isDragging = false
+    let dragStartX = 0
+    let dragStartY = 0
+    let dragStartPanX = 0
+    let dragStartPanY = 0
+
+    // Perspective projection
+    const FL = FOCAL_LENGTH
+    const CAM_OFFSET = 100 // how far behind cameraZ the eye sits
+
+    const MAX_RENDER = 60 // max bubbles to render per frame
+    const MAX_DEPTH = FL * 5 // don't project nodes beyond this distance
+
+    function projectNodes() {
+      const eyeZ = cameraZ - CAM_OFFSET // actual eye position
+      for (const n of nodes) {
+        const dz = n.wz - eyeZ
+        // Early cull: behind camera or too far ahead
+        if (dz <= 10 || dz > MAX_DEPTH) {
+          n.visible = false
+          n.pr = 0
+          continue
         }
-        break;
+        // Lateral offset from drag
+        const wx = n.wx - panX
+        const wy = n.wy - panY
+        const scale = FL / dz
+        n.px = centerX + wx * scale
+        n.py = centerY + wy * scale
+        n.pr = n.baseRadius * scale
 
-      case "streams":
-        simulation
-          .force("center", null)
-          .force("x", d3.forceX<BubbleNode>(W / 2).strength(0.05))
-          .force("y", d3.forceY<BubbleNode>((d) => streamsY(Math.max(1, d.max_streams))).strength(0.15));
-
-        // Axis labels
-        lensLabels
-          .append("text")
-          .attr("x", 8)
-          .attr("y", 16)
-          .attr("font-size", 12)
-          .attr("fill", "#71717a")
-          .text("More streams");
-        lensLabels
-          .append("text")
-          .attr("x", 8)
-          .attr("y", H - 4)
-          .attr("font-size", 12)
-          .attr("fill", "#71717a")
-          .text("Fewer streams");
-        break;
-
-      case "sound": {
-        // X = energy (0-1), Y = valence (0-1)
-        // Energy: left = low, right = high
-        // Valence: top = happy, bottom = sad
-        const energyScale = d3.scaleLinear().domain([0, 1]).range([40, W - 40]).clamp(true);
-        const valenceScale = d3.scaleLinear().domain([0, 1]).range([H - 40, 40]).clamp(true);
-
-        simulation
-          .force("center", null)
-          .force("x", d3.forceX<BubbleNode>((d) => energyScale(d.energy ?? 0.5)).strength(0.15))
-          .force("y", d3.forceY<BubbleNode>((d) => valenceScale(d.valence ?? 0.5)).strength(0.15));
-
-        // Axis labels
-        lensLabels.append("text").attr("x", W / 2).attr("y", H + 4).attr("text-anchor", "middle")
-          .attr("font-size", 12).attr("fill", "#71717a").text("Energy \u2192");
-        lensLabels.append("text").attr("x", 0).attr("y", H + 4)
-          .attr("font-size", 12).attr("fill", "#71717a").text("Chill");
-        lensLabels.append("text").attr("x", W).attr("y", H + 4).attr("text-anchor", "end")
-          .attr("font-size", 12).attr("fill", "#71717a").text("Intense");
-
-        // Valence labels (vertical)
-        lensLabels.append("text").attr("x", -4).attr("y", 16).attr("text-anchor", "end")
-          .attr("font-size", 12).attr("fill", "#71717a").text("Happy");
-        lensLabels.append("text").attr("x", -4).attr("y", H - 4).attr("text-anchor", "end")
-          .attr("font-size", 12).attr("fill", "#71717a").text("Sad");
-
-        // Quadrant labels (faint)
-        const quadrants = [
-          { label: "Chill & Happy", x: W * 0.15, y: 40 },
-          { label: "Intense & Happy", x: W * 0.85, y: 40 },
-          { label: "Chill & Sad", x: W * 0.15, y: H - 24 },
-          { label: "Intense & Sad", x: W * 0.85, y: H - 24 },
-        ];
-        for (const q of quadrants) {
-          lensLabels.append("text").attr("x", q.x).attr("y", q.y).attr("text-anchor", "middle")
-            .attr("font-size", 12).attr("font-weight", 500).attr("fill", "#3f3f46").text(q.label);
-        }
-        break;
+        n.visible =
+          n.pr > 0.5 &&
+          n.px > -n.pr * 2 &&
+          n.px < cw + n.pr * 2 &&
+          n.py > -n.pr * 2 &&
+          n.py < ch + n.pr * 2
       }
     }
 
-    // Restart simulation to animate transition
-    simulation.alpha(0.6).restart();
-  }, [activeLens, songs]);
+    function draw() {
+      ctx.clearRect(0, 0, cw, ch)
+      projectNodes()
+
+      // Sort by depth (far to near) for painter's algorithm
+      const sorted = nodes
+        .filter((n) => n.visible)
+        .sort((a, b) => b.wz - a.wz) // far bubbles first
+        .slice(0, MAX_RENDER) // cap render count for performance
+
+      for (const n of sorted) {
+        const isHovered = n === hoveredNode
+
+        // Depth-based fade: farther bubbles are dimmer
+        const eyeZ = cameraZ - CAM_OFFSET
+        const distFromEye = n.wz - eyeZ
+        const maxVisible = FL * 6
+        const depthFade = Math.max(0.15, Math.min(1, 1 - distFromEye / maxVisible))
+
+        ctx.save()
+        ctx.globalAlpha = depthFade
+
+        if (n.imgLoaded && n.img && n.pr >= 16) {
+          // Clip to circle
+          ctx.beginPath()
+          ctx.arc(n.px, n.py, n.pr, 0, Math.PI * 2)
+          ctx.save()
+          ctx.clip()
+
+          // Blurred album art background
+          if (n.blurCanvas) {
+            ctx.drawImage(n.blurCanvas, n.px - n.pr, n.py - n.pr, n.pr * 2, n.pr * 2)
+          } else {
+            ctx.drawImage(n.img, n.px - n.pr, n.py - n.pr, n.pr * 2, n.pr * 2)
+          }
+
+          // Dark overlay
+          ctx.fillStyle = "rgba(0,0,0,0.45)"
+          ctx.fillRect(n.px - n.pr, n.py - n.pr, n.pr * 2, n.pr * 2)
+
+          // Sharp album art
+          const hasLabel = n.pr >= 36
+          const artSize = n.pr * (hasLabel ? 1.05 : 1.3)
+          const artR = artSize / 2
+          const artOffsetY = hasLabel ? -n.pr * 0.18 : 0
+          const rx = n.px - artR
+          const ry = n.py - artR + artOffsetY
+          const cornerR = artSize * 0.12
+          ctx.beginPath()
+          ctx.moveTo(rx + cornerR, ry)
+          ctx.lineTo(rx + artSize - cornerR, ry)
+          ctx.arcTo(rx + artSize, ry, rx + artSize, ry + cornerR, cornerR)
+          ctx.lineTo(rx + artSize, ry + artSize - cornerR)
+          ctx.arcTo(rx + artSize, ry + artSize, rx + artSize - cornerR, ry + artSize, cornerR)
+          ctx.lineTo(rx + cornerR, ry + artSize)
+          ctx.arcTo(rx, ry + artSize, rx, ry + artSize - cornerR, cornerR)
+          ctx.lineTo(rx, ry + cornerR)
+          ctx.arcTo(rx, ry, rx + cornerR, ry, cornerR)
+          ctx.closePath()
+          ctx.clip()
+          ctx.drawImage(n.img, rx, ry, artSize, artSize)
+
+          ctx.restore()
+
+          // Category tint
+          ctx.beginPath()
+          ctx.arc(n.px, n.py, n.pr, 0, Math.PI * 2)
+          ctx.fillStyle = catColor + "25"
+          ctx.fill()
+
+          // 3D shading
+          ctx.beginPath()
+          ctx.arc(n.px, n.py, n.pr, 0, Math.PI * 2)
+          const shading = ctx.createRadialGradient(
+            n.px - n.pr * 0.3, n.py - n.pr * 0.3, n.pr * 0.1,
+            n.px, n.py, n.pr,
+          )
+          shading.addColorStop(0, "rgba(255,255,255,0.08)")
+          shading.addColorStop(0.6, "rgba(0,0,0,0)")
+          shading.addColorStop(1, "rgba(0,0,0,0.35)")
+          ctx.fillStyle = shading
+          ctx.fill()
+
+          // Rim ring
+          ctx.beginPath()
+          ctx.arc(n.px, n.py, n.pr - 0.5, 0, Math.PI * 2)
+          ctx.strokeStyle = "rgba(255,255,255,0.1)"
+          ctx.lineWidth = 1
+          ctx.stroke()
+        } else if (n.blurCanvas && n.pr >= 3) {
+          ctx.beginPath()
+          ctx.arc(n.px, n.py, n.pr, 0, Math.PI * 2)
+          ctx.save()
+          ctx.clip()
+          ctx.drawImage(n.blurCanvas, n.px - n.pr, n.py - n.pr, n.pr * 2, n.pr * 2)
+          ctx.fillStyle = "rgba(0,0,0,0.3)"
+          ctx.fillRect(n.px - n.pr, n.py - n.pr, n.pr * 2, n.pr * 2)
+          ctx.restore()
+        } else {
+          ctx.beginPath()
+          ctx.arc(n.px, n.py, n.pr, 0, Math.PI * 2)
+          ctx.fillStyle = catColor
+          ctx.globalAlpha = depthFade * 0.5
+          ctx.fill()
+        }
+
+        // Hover ring
+        if (isHovered) {
+          ctx.beginPath()
+          ctx.arc(n.px, n.py, n.pr, 0, Math.PI * 2)
+          ctx.strokeStyle = "#fff"
+          ctx.lineWidth = 2
+          ctx.stroke()
+        }
+
+        ctx.restore()
+      }
+
+      // HUD
+      const pillR = ch / 2
+      const safeL = pillR * 0.35
+      const safeB = ch * 0.12
+      ctx.save()
+      ctx.fillStyle = "#9CA3AF"
+      ctx.font = "500 12px Inter, system-ui, sans-serif"
+      ctx.textAlign = "left"
+      ctx.textBaseline = "bottom"
+      const depthLabel =
+        depthAxis === "streams"
+          ? "Peak Streams"
+          : depthAxis === "weeks"
+            ? "Weeks on Chart"
+            : "Peak Rank"
+      const progress = Math.round((Math.max(0, cameraZ) / HELIX_LENGTH) * 100)
+      ctx.fillText(`${depthLabel} · ${Math.min(100, Math.max(0, progress))}%`, safeL, ch - safeB)
+
+      if (cameraZ < 50) {
+        ctx.fillStyle = "#3f3f46"
+        ctx.textAlign = "center"
+        ctx.textBaseline = "bottom"
+        ctx.fillText("Scroll to travel along the strand", cw / 2, ch - safeB - 16)
+      }
+      ctx.restore()
+    }
+
+    // --- DOM overlay for text labels ---
+    const overlay = labelOverlayRef.current
+    const labelPool: Map<string, HTMLDivElement> = new Map()
+
+    function updateLabelOverlay() {
+      if (!overlay) return
+      const visible = nodes.filter(
+        (n) => n.visible && n.pr >= 36 && n.imgLoaded,
+      )
+      const visibleIds = new Set(visible.map((n) => n.track_id))
+
+      for (const [id, el] of labelPool) {
+        if (!visibleIds.has(id)) {
+          el.remove()
+          labelPool.delete(id)
+        }
+      }
+
+      // Near bubbles get label priority
+      visible.sort((a, b) => a.wz - b.wz)
+      const placedBubbles: Song3D[] = []
+
+      for (const n of visible) {
+        const labelCx = n.px
+        const labelCy = n.py + n.pr * 0.40
+        let occluded = false
+        for (const placed of placedBubbles) {
+          const dx = labelCx - placed.px
+          const dy = labelCy - placed.py
+          if (dx * dx + dy * dy < placed.pr * placed.pr) {
+            occluded = true
+            break
+          }
+        }
+        placedBubbles.push(n)
+
+        const eyeZL = cameraZ - CAM_OFFSET
+        const distFromEyeL = n.wz - eyeZL
+        const maxVisibleL = FL * 6
+        const depthFade = Math.max(0.15, Math.min(1, 1 - distFromEyeL / maxVisibleL))
+
+        if (depthFade < 0.15 || occluded) {
+          const existing = labelPool.get(n.track_id)
+          if (existing) existing.style.opacity = "0"
+          continue
+        }
+
+        let el = labelPool.get(n.track_id)
+        if (!el) {
+          el = document.createElement("div")
+          el.style.position = "absolute"
+          el.style.pointerEvents = "none"
+          el.style.textAlign = "center"
+          el.style.willChange = "transform, opacity"
+          el.style.left = "0"
+          el.style.top = "0"
+          el.innerHTML = `<div class="bubble-title"></div><div class="bubble-artist"></div>`
+          overlay.appendChild(el)
+          labelPool.set(n.track_id, el)
+        }
+
+        const titleSize = Math.max(9, n.pr / 6)
+        const artistSize = Math.max(8, n.pr / 7.5)
+        const labelY = n.pr * 0.40
+        const chordHalf = Math.sqrt(Math.max(0, n.pr * n.pr - labelY * labelY))
+        const maxW = chordHalf * 2 - 4
+
+        const titleEl = el.firstElementChild as HTMLDivElement
+        const artistEl = el.lastElementChild as HTMLDivElement
+
+        titleEl.textContent = truncate(n.track_name, 18)
+        titleEl.style.fontSize = `${titleSize}px`
+        titleEl.style.fontWeight = "600"
+        titleEl.style.color = "#fff"
+        titleEl.style.lineHeight = "1.2"
+        titleEl.style.overflow = "hidden"
+        titleEl.style.textOverflow = "ellipsis"
+        titleEl.style.whiteSpace = "nowrap"
+        titleEl.style.maxWidth = `${maxW * 0.85}px`
+        titleEl.style.textShadow = "0 1px 4px rgba(0,0,0,0.8)"
+
+        artistEl.textContent = truncate(n.artist_name, 20)
+        artistEl.style.fontSize = `${artistSize}px`
+        artistEl.style.fontWeight = "400"
+        artistEl.style.color = "#B3B3B3"
+        artistEl.style.lineHeight = "1.2"
+        artistEl.style.overflow = "hidden"
+        artistEl.style.textOverflow = "ellipsis"
+        artistEl.style.whiteSpace = "nowrap"
+        artistEl.style.maxWidth = `${maxW * 0.85}px`
+        artistEl.style.textShadow = "0 1px 4px rgba(0,0,0,0.8)"
+
+        el.style.transform = `translate(${n.px}px, ${n.py + n.pr * 0.40}px) translate(-50%, 0)`
+        el.style.opacity = String(depthFade)
+      }
+    }
+
+    // Animation loop
+    function animate() {
+      cameraZ += (targetCameraZ - cameraZ) * 0.12
+      if (Math.abs(cameraZ - targetCameraZ) < 0.5) cameraZ = targetCameraZ
+      panX += (targetPanX - panX) * 0.12
+      if (Math.abs(panX - targetPanX) < 0.5) panX = targetPanX
+      panY += (targetPanY - panY) * 0.12
+      if (Math.abs(panY - targetPanY) < 0.5) panY = targetPanY
+
+      draw()
+      updateLabelOverlay()
+      animFrameId = requestAnimationFrame(animate)
+    }
+
+    animFrameId = requestAnimationFrame(animate)
+
+    // Scroll → advance camera along helix axis (Z)
+    function handleWheel(e: WheelEvent) {
+      e.preventDefault()
+      const delta = e.deltaY * 1.5
+      targetCameraZ = Math.max(-200, Math.min(HELIX_LENGTH + 200, targetCameraZ + delta))
+    }
+
+    // Drag to pan
+    function handleMouseDown(e: MouseEvent) {
+      if (e.button === 0 || e.button === 1) {
+        isDragging = true
+        dragStartX = e.clientX
+        dragStartY = e.clientY
+        dragStartPanX = targetPanX
+        dragStartPanY = targetPanY
+        if (e.button === 1) e.preventDefault()
+      }
+    }
+
+    function handleMouseMove(e: MouseEvent) {
+      if (isDragging) {
+        const dx = e.clientX - dragStartX
+        const dy = e.clientY - dragStartY
+        targetPanX = dragStartPanX - dx * 0.5
+        targetPanY = dragStartPanY - dy * 0.5
+        canvas.style.cursor = "grabbing"
+        setHoveredSong(null)
+        hoveredNode = null
+        return
+      }
+
+      // Hit test
+      const r = canvas.getBoundingClientRect()
+      const mx = e.clientX - r.left
+      const my = e.clientY - r.top
+
+      const hoverable = nodes.filter(
+        (n) => n.visible && n.pr >= 8 && n.imgLoaded,
+      )
+      // Near bubbles (low wz) drawn on top — check them first
+      hoverable.sort((a, b) => a.wz - b.wz)
+
+      let hit: Song3D | null = null
+      for (const n of hoverable) {
+        const ddx = mx - n.px
+        const ddy = my - n.py
+        if (ddx * ddx + ddy * ddy <= n.pr * n.pr) {
+          hit = n
+          break
+        }
+      }
+
+      hoveredNode = hit
+      canvas.style.cursor = hit ? "pointer" : "grab"
+
+      if (hit) {
+        const wrapR = wrap.getBoundingClientRect()
+        const canvasR = canvas.getBoundingClientRect()
+        setHoveredSong(hit)
+        setTooltipPos({
+          x: hit.px + canvasR.left - wrapR.left + 16,
+          y: hit.py + canvasR.top - wrapR.top,
+        })
+      } else {
+        setHoveredSong(null)
+      }
+    }
+
+    function handleMouseUp(e: MouseEvent) {
+      if (!isDragging) return
+      const dx = Math.abs(e.clientX - dragStartX)
+      const dy = Math.abs(e.clientY - dragStartY)
+      const wasDrag = dx > 4 || dy > 4
+
+      isDragging = false
+      canvas.style.cursor = "grab"
+
+      if (!wasDrag && e.button === 0 && hoveredNode) {
+        const r = canvas.getBoundingClientRect()
+        const mx = e.clientX - r.left
+        const my = e.clientY - r.top
+        const visible = nodes.filter((n) => n.visible && n.pr > 3)
+        visible.sort((a, b) => a.wz - b.wz)
+        for (const n of visible) {
+          const ddx = mx - n.px
+          const ddy = my - n.py
+          if (ddx * ddx + ddy * ddy <= n.pr * n.pr) {
+            setSelectedSong(n)
+            setHoveredSong(null)
+            break
+          }
+        }
+      }
+    }
+
+    // Touch support
+    let touchStartX = 0
+    let touchStartY = 0
+    let touchStartCameraZ = 0
+    let touchStartPanX = 0
+    let touchIsDrag = false
+
+    function handleTouchStart(e: TouchEvent) {
+      if (e.touches.length !== 1) return
+      const t = e.touches[0]
+      touchStartX = t.clientX
+      touchStartY = t.clientY
+      touchStartCameraZ = targetCameraZ
+      touchStartPanX = targetPanX
+      touchIsDrag = false
+    }
+
+    function handleTouchMove(e: TouchEvent) {
+      if (e.touches.length !== 1) return
+      e.preventDefault()
+      const t = e.touches[0]
+      const dx = t.clientX - touchStartX
+      const dy = t.clientY - touchStartY
+      if (Math.abs(dx) > 4 || Math.abs(dy) > 4) touchIsDrag = true
+      if (touchIsDrag) {
+        // Vertical swipe = advance along helix, horizontal = lateral pan
+        targetCameraZ = Math.max(-200, Math.min(HELIX_LENGTH + 200, touchStartCameraZ + dy * 1.5))
+        targetPanX = touchStartPanX - dx * 0.5
+      }
+    }
+
+    function handleTouchEnd(e: TouchEvent) {
+      if (touchIsDrag || e.changedTouches.length !== 1) return
+      const touch = e.changedTouches[0]
+      const r = canvas.getBoundingClientRect()
+      const mx = touch.clientX - r.left
+      const my = touch.clientY - r.top
+
+      const visible = nodes.filter((n) => n.visible && n.pr > 3)
+      visible.sort((a, b) => a.wz - b.wz)
+      for (const n of visible) {
+        const ddx = mx - n.px
+        const ddy = my - n.py
+        if (ddx * ddx + ddy * ddy <= n.pr * n.pr) {
+          setSelectedSong(n)
+          break
+        }
+      }
+    }
+
+    function handleContextMenu(e: MouseEvent) {
+      if (e.button === 1) e.preventDefault()
+    }
+
+    canvas.addEventListener("wheel", handleWheel, { passive: false })
+    canvas.addEventListener("mousedown", handleMouseDown)
+    canvas.addEventListener("mousemove", handleMouseMove)
+    canvas.addEventListener("mouseup", handleMouseUp)
+    canvas.addEventListener("mouseleave", () => {
+      isDragging = false
+    })
+    canvas.addEventListener("touchstart", handleTouchStart, { passive: true })
+    canvas.addEventListener("touchmove", handleTouchMove, { passive: false })
+    canvas.addEventListener("touchend", handleTouchEnd)
+    canvas.addEventListener("auxclick", handleContextMenu)
+    canvas.style.cursor = "grab"
+
+    return () => {
+      cancelAnimationFrame(animFrameId)
+      for (const t of batchTimers) clearTimeout(t)
+      canvas.removeEventListener("wheel", handleWheel)
+      canvas.removeEventListener("mousedown", handleMouseDown)
+      canvas.removeEventListener("mousemove", handleMouseMove)
+      canvas.removeEventListener("mouseup", handleMouseUp)
+      canvas.removeEventListener("touchstart", handleTouchStart)
+      canvas.removeEventListener("touchmove", handleTouchMove)
+      canvas.removeEventListener("touchend", handleTouchEnd)
+      canvas.removeEventListener("auxclick", handleContextMenu)
+      for (const [, el] of labelPool) el.remove()
+      labelPool.clear()
+    }
+  }, [activeCategory, categorySongs, depthAxis, categories, activeLens])
+
+  const activeCat = categories.find((c) => c.key === activeCategory)
 
   return (
-    <div ref={containerRef} className="relative">
+    <div
+      ref={containerRef}
+      className="relative flex min-h-0 flex-col"
+      style={{ height: "calc(100dvh - 7rem)" }}
+    >
       <BubbleLensSelector
         activeLens={activeLens}
-        onLensChange={setActiveLens}
+        onLensChange={handleLensChange}
         soundDisabled={!songs.some((s) => s.energy != null)}
+        activeCategory={activeCategory}
+        depthAxis={depthAxis}
+        onDepthChange={setDepthAxis}
       />
-      <div className="mt-3 rounded-2xl border border-zinc-800 bg-surface p-4">
+
+      <div
+        ref={chartWrapRef}
+        className="relative mt-3 flex-1 overflow-hidden rounded-[999px] border border-zinc-800 bg-surface"
+      >
+        {/* Back button (Level 2 only) */}
+        {activeCategory && (
+          <button
+            onClick={handleBack}
+            className="absolute left-[12%] top-8 z-10 flex items-center gap-2 rounded-full border border-zinc-700 bg-surface/90 px-3 py-1.5 text-sm font-medium text-[#B3B3B3] backdrop-blur transition-colors hover:border-zinc-600 hover:text-white"
+          >
+            <svg
+              className="h-4 w-4"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M15 19l-7-7 7-7"
+              />
+            </svg>
+            Back
+          </button>
+        )}
+
+        {/* Category title (Level 2 only) */}
+        {activeCat && (
+          <div className="absolute right-[12%] top-8 z-10 text-right">
+            <p className="text-lg font-bold" style={{ color: activeCat.color }}>
+              {activeCat.label}
+            </p>
+            <p className="text-xs text-zinc-500">
+              {activeCat.songs.length} songs
+            </p>
+          </div>
+        )}
+
+        {/* SVG for Level 1 */}
         <svg
           ref={svgRef}
-          className="w-full"
+          className="h-full w-full"
+          style={{ display: activeCategory ? "none" : "block" }}
           role="img"
-          aria-label="Interactive bubble explorer showing top 1000 songs sized by streams and colored by genre"
+          aria-label={`${categories.length} category bubbles for ${activeLens} lens`}
+        />
+
+        {/* Canvas for Level 2 z-axis zoom */}
+        <canvas
+          ref={canvasRef}
+          style={{ display: activeCategory ? "block" : "none" }}
+          role="img"
+          aria-label={
+            activeCategory
+              ? `Songs in ${activeCat?.label || activeCategory} — scroll to fly deeper`
+              : undefined
+          }
+        />
+
+        {/* DOM overlay for jitter-free text labels over canvas */}
+        <div
+          ref={labelOverlayRef}
+          style={{
+            display: activeCategory ? "block" : "none",
+            position: "absolute",
+            inset: 0,
+            pointerEvents: "none",
+            overflow: "hidden",
+          }}
         />
       </div>
+
       <BubbleTooltip song={hoveredSong} position={tooltipPos} />
       <BubbleDetailDrawer song={selectedSong} onClose={handleCloseDrawer} />
-      <BubbleInsightPanel lens={activeLens} songs={songs} />
+      <BubbleInsightPanel
+        lens={activeLens}
+        songs={activeCategory ? categorySongs : songs}
+      />
     </div>
-  );
+  )
 }
