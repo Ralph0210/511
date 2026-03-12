@@ -23,12 +23,25 @@ type Props = {
 const GAP_THRESHOLD_MS = 10 * 24 * 60 * 60 * 1000;
 const OFF_CHART_RANK = 210;
 
+// viewBox dimensions — wide rectangle
+const WIDTH = 1200;
+const HEIGHT = 340;
+const MARGIN = { top: 28, right: 64, bottom: 56, left: 64 };
+const W = WIDTH - MARGIN.left - MARGIN.right;
+const H = HEIGHT - MARGIN.top - MARGIN.bottom;
+
+function styleAxis(sel: d3.Selection<SVGGElement, unknown, null, undefined>) {
+  sel.select(".domain").attr("stroke", "#3f3f46");
+  sel.selectAll(".tick line").attr("stroke", "#3f3f46");
+  sel.selectAll(".tick text").attr("fill", "#9CA3AF").attr("font-size", 12);
+}
+
 export default function ChartRiseScrolly({ data, peakRank, chartRunInfo, beat }: Props) {
   const svgRef = useRef<SVGSVGElement>(null);
   const drawnRef = useRef(false);
   const prevBeatRef = useRef(-2);
 
-  const prevDataRef = useRef<DataPoint[] | null>(null);
+  const prevDataRef = useRef<string | null>(null);
 
   const stateRef = useRef<{
     x: d3.ScaleTime<number, number>;
@@ -38,10 +51,9 @@ export default function ChartRiseScrolly({ data, peakRank, chartRunInfo, beat }:
     yFull: [number, number];
     xZoomed: [Date, Date];
     yZoomed: [number, number];
-    w: number;
-    h: number;
     sorted: DataPoint[];
     parseDate: (s: string) => Date | null;
+    prefersReducedMotion: boolean;
   } | null>(null);
 
   const { runs, hasReentries } = useMemo(() => {
@@ -66,12 +78,26 @@ export default function ChartRiseScrolly({ data, peakRank, chartRunInfo, beat }:
   }, [data]);
 
   useEffect(() => {
-    if (!svgRef.current || !data.length) return;
+    if (!svgRef.current) return;
     const svg = d3.select(svgRef.current);
 
-    // Reset when data changes (new song)
-    if (prevDataRef.current !== data) {
-      prevDataRef.current = data;
+    // Empty state
+    if (!data.length) {
+      svg.selectAll("*").remove();
+      svg.attr("viewBox", `0 0 ${WIDTH} ${HEIGHT}`)
+        .attr("preserveAspectRatio", "xMidYMid meet")
+        .style("width", "100%").style("height", "auto");
+      svg.append("text")
+        .attr("x", WIDTH / 2).attr("y", HEIGHT / 2)
+        .attr("text-anchor", "middle").attr("font-size", 14).attr("fill", "#71717a")
+        .text("Data unavailable");
+      return;
+    }
+
+    // Reset when data actually changes (new song) — compare by content, not reference
+    const dataKey = `${data.length}:${data[0]?.week}:${data[data.length - 1]?.week}`;
+    if (prevDataRef.current !== dataKey) {
+      prevDataRef.current = dataKey;
       drawnRef.current = false;
       prevBeatRef.current = -2;
       stateRef.current = null;
@@ -81,22 +107,23 @@ export default function ChartRiseScrolly({ data, peakRank, chartRunInfo, beat }:
     const prevBeat = prevBeatRef.current;
     prevBeatRef.current = beat;
 
+    // Detect reduced motion preference
+    const prefersReducedMotion = typeof window !== "undefined"
+      && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
     if (isFirstDraw) {
       drawnRef.current = true;
       svg.selectAll("*").remove();
 
-      const container = svgRef.current.parentElement!;
-      const width = container.clientWidth;
-      const height = 400;
-      svg.attr("width", width).attr("height", height);
+      // viewBox-based responsive sizing
+      svg.attr("viewBox", `0 0 ${WIDTH} ${HEIGHT}`)
+        .attr("preserveAspectRatio", "xMidYMid meet")
+        .style("width", "100%").style("height", "auto");
 
-      const margin = { top: 24, right: 60, bottom: 52, left: 56 };
-      const w = width - margin.left - margin.right;
-      const h = height - margin.top - margin.bottom;
-      const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+      const g = svg.append("g").attr("transform", `translate(${MARGIN.left},${MARGIN.top})`);
 
       svg.append("defs").append("clipPath").attr("id", "rise-clip")
-        .append("rect").attr("x", -2).attr("y", -2).attr("width", w + 4).attr("height", h + 4);
+        .append("rect").attr("x", -2).attr("y", -2).attr("width", W + 4).attr("height", H + 4);
 
       const parseDate = d3.timeParse("%Y-%m-%d");
       const sorted = [...data]
@@ -106,11 +133,11 @@ export default function ChartRiseScrolly({ data, peakRank, chartRunInfo, beat }:
       const xExtent = d3.extent(dates) as [Date, Date];
 
       const yMax = hasReentries ? OFF_CHART_RANK : 200;
-      const x = d3.scaleTime().domain(xExtent).range([0, w]);
-      const y = d3.scaleLinear().domain([yMax, 1]).range([h, 0]);
+      const x = d3.scaleTime().domain(xExtent).range([0, W]).clamp(true);
+      const y = d3.scaleLinear().domain([yMax, 1]).range([H, 0]).clamp(true);
       const numericStreams = sorted.map((d) => d.streams).filter((s): s is number => s != null && s > 0);
       const maxStreams = numericStreams.length ? Math.max(...numericStreams) : 1;
-      const yStreams = d3.scaleLinear().domain([0, maxStreams]).range([h, h * 0.5]).clamp(true);
+      const yStreams = d3.scaleLinear().domain([0, maxStreams]).range([H, H * 0.5]).clamp(true);
 
       // Compute zoom domains around peak
       const peakPoint = sorted.reduce((best, d) => d.rank < best.rank ? d : best);
@@ -127,7 +154,7 @@ export default function ChartRiseScrolly({ data, peakRank, chartRunInfo, beat }:
       const yZoomTop = Math.max(1, peakRank - Math.max(5, Math.round(peakRank * 0.15)));
 
       stateRef.current = {
-        x, y, yStreams, w, h, sorted, parseDate,
+        x, y, yStreams, sorted, parseDate, prefersReducedMotion,
         xFull: xExtent,
         yFull: [yMax, 1],
         xZoomed: [xZoomStart, xZoomEnd],
@@ -137,24 +164,26 @@ export default function ChartRiseScrolly({ data, peakRank, chartRunInfo, beat }:
       // X axis
       g.append("g")
         .attr("class", "x-axis")
-        .attr("transform", `translate(0,${h})`)
-        .call(d3.axisBottom(x).ticks(6).tickFormat(d3.timeFormat("%b '%y") as (d: Date | d3.NumberValue) => string))
-        .call((sel) => sel.select(".domain").attr("stroke", "#3f3f46"))
-        .call((sel) => sel.selectAll(".tick line").attr("stroke", "#3f3f46"))
-        .call((sel) => sel.selectAll(".tick text").attr("fill", "#9CA3AF").attr("font-size", 13));
+        .attr("transform", `translate(0,${H})`)
+        .call(
+          d3.axisBottom(x).ticks(6).tickSizeOuter(0).tickPadding(8)
+            .tickFormat(d3.timeFormat("%b '%y") as (d: Date | d3.NumberValue) => string)
+        )
+        .call(styleAxis);
 
       // Y axis
       g.append("g")
         .attr("class", "y-axis")
-        .call(d3.axisLeft(y).tickValues([1, 10, 50, 100, 200]).tickFormat((d) => `#${d}`))
-        .call((sel) => sel.select(".domain").attr("stroke", "#3f3f46"))
-        .call((sel) => sel.selectAll(".tick line").attr("stroke", "#3f3f46"))
-        .call((sel) => sel.selectAll(".tick text").attr("fill", "#9CA3AF").attr("font-size", 13));
+        .call(
+          d3.axisLeft(y).tickValues([1, 10, 50, 100, 200]).tickSizeOuter(0).tickPadding(8)
+            .tickFormat((d) => `#${d}`)
+        )
+        .call(styleAxis);
 
       g.append("text")
         .attr("transform", "rotate(-90)")
-        .attr("x", -h / 2).attr("y", -40)
-        .attr("text-anchor", "middle").attr("font-size", 13).attr("fill", "#71717a")
+        .attr("x", -H / 2).attr("y", -48)
+        .attr("text-anchor", "middle").attr("font-size", 13).attr("font-weight", 500).attr("fill", "#71717a")
         .text("Chart Rank");
 
       // Grid lines
@@ -162,7 +191,7 @@ export default function ChartRiseScrolly({ data, peakRank, chartRunInfo, beat }:
       [1, 10, 50, 100, 200].forEach((tick) => {
         g.select(".grid-lines").append("line")
           .attr("class", "grid-line")
-          .attr("x1", 0).attr("x2", w)
+          .attr("x1", 0).attr("x2", W)
           .attr("y1", y(tick)).attr("y2", y(tick))
           .attr("stroke", "#27272a").attr("stroke-dasharray", "3,3")
           .attr("data-rank", tick);
@@ -175,7 +204,7 @@ export default function ChartRiseScrolly({ data, peakRank, chartRunInfo, beat }:
       ].forEach(({ rank, label }) => {
         g.append("text")
           .attr("class", "tier-label")
-          .attr("x", w + 8).attr("y", y(rank))
+          .attr("x", W + 8).attr("y", y(rank))
           .attr("dy", "0.35em").attr("font-size", 12).attr("fill", "#52525b")
           .attr("data-rank", rank)
           .text(label);
@@ -184,7 +213,35 @@ export default function ChartRiseScrolly({ data, peakRank, chartRunInfo, beat }:
       // Data group (clipped)
       const dataG = g.append("g").attr("class", "data-group").attr("clip-path", "url(#rise-clip)");
 
-      // Gap indicators
+      // Annotation group (unclipped — labels that may extend above chart area)
+      const annotG = g.append("g").attr("class", "annotation-group");
+
+      // Line and area per run
+      const areaGen = d3.area<DataPoint>()
+        .x((d) => x(parseDate(d.week)!)).y0(H).y1((d) => y(d.rank)).curve(d3.curveMonotoneX);
+      const lineGen = d3.line<DataPoint>()
+        .x((d) => x(parseDate(d.week)!)).y((d) => y(d.rank)).curve(d3.curveMonotoneX);
+
+      runs.forEach((run, ri) => {
+        if (run.length === 1) {
+          // Single-point run: line path would be degenerate, draw a circle instead
+          const pt = run[0];
+          dataG.append("circle").attr("class", "rise-line single-point-dot").attr("data-run", ri)
+            .attr("cx", x(parseDate(pt.week)!)).attr("cy", y(pt.rank))
+            .attr("r", 4).attr("fill", "#1DB954").attr("opacity", 0)
+            .attr("data-week", pt.week).attr("data-rank", pt.rank);
+        } else {
+          dataG.append("path").datum(run).attr("d", areaGen)
+            .attr("class", "rise-area").attr("data-run", ri)
+            .attr("fill", "#1DB954").attr("opacity", 0);
+          const path = dataG.append("path").datum(run).attr("d", lineGen)
+            .attr("class", "rise-line").attr("data-run", ri)
+            .attr("fill", "none").attr("stroke", "#1DB954").attr("stroke-width", 2.5).attr("opacity", 0);
+          path.attr("data-total-length", path.node()?.getTotalLength() || 0);
+        }
+      });
+
+      // Gap indicators (appended after lines/areas so they render on top)
       if (hasReentries) {
         for (let i = 0; i < runs.length - 1; i++) {
           const prevRun = runs[i];
@@ -219,53 +276,37 @@ export default function ChartRiseScrolly({ data, peakRank, chartRunInfo, beat }:
             .attr("data-week", firstPt.week).attr("data-rank", firstPt.rank);
 
           if (i === 0) {
-            dataG.append("text").attr("class", "reentry-label")
+            annotG.append("text").attr("class", "reentry-label")
               .attr("x", x2 + 10).attr("y", y(firstPt.rank) - 6)
-              .attr("font-size", 12).attr("fill", "#EF4444").attr("font-weight", 600).attr("opacity", 0)
+              .attr("font-size", 13).attr("fill", "#EF4444").attr("font-weight", 600).attr("opacity", 0)
               .attr("data-week", firstPt.week).attr("data-rank", firstPt.rank)
               .text("Re-entry");
           }
         }
       }
 
-      // Line and area per run
-      const areaGen = d3.area<DataPoint>()
-        .x((d) => x(parseDate(d.week)!)).y0(h).y1((d) => y(d.rank)).curve(d3.curveMonotoneX);
-      const lineGen = d3.line<DataPoint>()
-        .x((d) => x(parseDate(d.week)!)).y((d) => y(d.rank)).curve(d3.curveMonotoneX);
-
-      runs.forEach((run, ri) => {
-        dataG.append("path").datum(run).attr("d", areaGen)
-          .attr("class", "rise-area").attr("data-run", ri)
-          .attr("fill", "#1DB954").attr("opacity", 0);
-        const path = dataG.append("path").datum(run).attr("d", lineGen)
-          .attr("class", "rise-line").attr("data-run", ri)
-          .attr("fill", "none").attr("stroke", "#1DB954").attr("stroke-width", 2.5).attr("opacity", 0);
-        path.attr("data-total-length", path.node()?.getTotalLength() || 0);
-      });
-
-      // Peak annotation
+      // Peak annotation (in annotG — unclipped)
       const peakX = x(peakDate);
       const peakY = y(peakPoint.rank);
-      dataG.append("circle").attr("class", "rise-peak-dot")
+      annotG.append("circle").attr("class", "rise-peak-dot")
         .attr("cx", peakX).attr("cy", peakY)
         .attr("r", 7).attr("fill", "#1DB954").attr("stroke", "#181818").attr("stroke-width", 2.5).attr("opacity", 0);
-      dataG.append("text").attr("class", "rise-peak-label")
+      annotG.append("text").attr("class", "rise-peak-label")
         .attr("x", peakX).attr("y", peakY - 18)
-        .attr("text-anchor", "middle").attr("font-size", 14).attr("font-weight", 700).attr("fill", "#1DB954").attr("opacity", 0)
+        .attr("text-anchor", "middle").attr("font-size", 13).attr("font-weight", 600).attr("fill", "#1DB954").attr("opacity", 0)
         .text(`Peak: #${peakPoint.rank}`);
 
       // Streams bars + right Y-axis
       const hasStreams = sorted.some((d) => d.streams && d.streams > 0);
       if (hasStreams) {
-        const barWidth = Math.max(2, w / sorted.length - 1);
+        const barWidth = Math.max(2, W / sorted.length - 1);
         dataG.selectAll(".stream-bar")
           .data(sorted.filter((d) => d.streams && d.streams > 0))
           .join("rect").attr("class", "stream-bar")
           .attr("x", (d) => x(parseDate(d.week)!) - barWidth / 2)
           .attr("y", (d) => yStreams(d.streams!))
           .attr("width", barWidth)
-          .attr("height", (d) => h - yStreams(d.streams!))
+          .attr("height", (d) => H - yStreams(d.streams!))
           .attr("fill", "#F59E0B").attr("opacity", 0);
 
         // Right Y-axis for streams
@@ -276,16 +317,16 @@ export default function ChartRiseScrolly({ data, peakRank, chartRunInfo, beat }:
           return String(v);
         };
         g.append("g").attr("class", "y-axis-streams")
-          .attr("transform", `translate(${w},0)`)
-          .call(d3.axisRight(yStreams).ticks(3).tickFormat(fmtStreams as (d: d3.NumberValue) => string))
+          .attr("transform", `translate(${W},0)`)
+          .call(d3.axisRight(yStreams).ticks(3).tickSizeOuter(0).tickPadding(8).tickFormat(fmtStreams as (d: d3.NumberValue) => string))
           .call((sel) => sel.select(".domain").remove())
           .call((sel) => sel.selectAll(".tick line").attr("stroke", "#F59E0B").attr("opacity", 0.3))
           .call((sel) => sel.selectAll(".tick text").attr("fill", "#F59E0B").attr("font-size", 12).attr("opacity", 0.7))
           .attr("opacity", 0);
 
         g.append("text").attr("class", "stream-label")
-          .attr("x", w).attr("y", h + 40)
-          .attr("text-anchor", "end").attr("font-size", 12).attr("fill", "#F59E0B").attr("opacity", 0)
+          .attr("x", W).attr("y", H + 40)
+          .attr("text-anchor", "end").attr("font-size", 13).attr("font-weight", 500).attr("fill", "#F59E0B").attr("opacity", 0)
           .text("Weekly streams \u25B2");
       }
     }
@@ -293,44 +334,90 @@ export default function ChartRiseScrolly({ data, peakRank, chartRunInfo, beat }:
     // --- Update visibility & axis-based zoom ---
     const g = svg.select("g");
     const dataG = g.select(".data-group");
-    const shouldAnimate = beat > prevBeat;
     const state = stateRef.current;
+    const noMotion = state?.prefersReducedMotion ?? false;
+    const shouldAnimate = !noMotion && beat !== prevBeat;
+    const isForward = beat > prevBeat;
+
+    // DEBUG: trace every effect invocation
+    console.log("[ChartRise]", {
+      beat, prevBeat, isFirstDraw, shouldAnimate, isForward,
+      zoomChanged: state ? (beat === 2) !== (prevBeat === 2) : "no-state",
+      doTransition: state ? shouldAnimate && ((beat === 2) !== (prevBeat === 2)) : "no-state",
+    });
+
+    // Skip update entirely if beat hasn't changed (e.g., Strict Mode double-invoke)
+    if (!shouldAnimate && !isFirstDraw) return;
+
+    // Cancel any in-flight transitions before applying new state
+    if (shouldAnimate) {
+      const all = g.selectAll("*");
+      g.interrupt("zoom").interrupt("vis");
+      all.interrupt("zoom").interrupt("vis");
+    }
 
     if (state) {
-      const { x, y, w, h, sorted, parseDate: pd } = state;
-      const dur = 700;
+      const { x, y, sorted, parseDate: pd } = state;
+      const dur = 800; // slow: major state change
 
       const xDomain: [Date, Date] = beat === 2 ? state.xZoomed : state.xFull;
       const yDomain: [number, number] = beat === 2 ? state.yZoomed : state.yFull;
-      const doTransition = shouldAnimate && ((beat === 2 && prevBeat < 2) || (beat !== 2 && prevBeat === 2));
+      const zoomChanged = (beat === 2) !== (prevBeat === 2);
+      const doTransition = shouldAnimate && zoomChanged;
+
+      console.log("[ChartRise] zoom", {
+        xDomain: xDomain.map(d => d.toISOString?.() ?? d),
+        yDomain,
+        zoomChanged,
+        doTransition,
+        lineCount: dataG.selectAll(".rise-line:not(.single-point-dot)").size(),
+        areaCount: dataG.selectAll(".rise-area").size(),
+      });
 
       x.domain(xDomain);
       y.domain(yDomain);
 
       const areaGen = d3.area<DataPoint>()
-        .x((d) => x(pd(d.week)!)).y0(h).y1((d) => y(d.rank)).curve(d3.curveMonotoneX);
+        .x((d) => x(pd(d.week)!)).y0(H).y1((d) => y(d.rank)).curve(d3.curveMonotoneX);
       const lineGen = d3.line<DataPoint>()
         .x((d) => x(pd(d.week)!)).y((d) => y(d.rank)).curve(d3.curveMonotoneX);
 
       // Axes
-      const xAxis = d3.axisBottom(x).ticks(6).tickFormat(d3.timeFormat("%b '%y") as (d: Date | d3.NumberValue) => string);
+      const xAxis = d3.axisBottom(x).ticks(6).tickSizeOuter(0).tickPadding(8)
+        .tickFormat(d3.timeFormat("%b '%y") as (d: Date | d3.NumberValue) => string);
       const yTickVals = beat === 2
         ? [yDomain[1], Math.round((yDomain[0] + yDomain[1]) / 2), yDomain[0]].filter((v, i, a) => a.indexOf(v) === i)
         : [1, 10, 50, 100, 200];
-      const yAxis = d3.axisLeft(y).tickValues(yTickVals).tickFormat((d) => `#${d}`);
-
-      const applyAxisStyle = (sel: d3.Selection<SVGGElement, unknown, null, undefined>) => {
-        sel.selectAll(".tick text").attr("fill", "#9CA3AF").attr("font-size", 13);
-        sel.select(".domain").attr("stroke", "#3f3f46");
-        sel.selectAll(".tick line").attr("stroke", "#3f3f46");
-      };
+      const yAxis = d3.axisLeft(y).tickValues(yTickVals).tickSizeOuter(0).tickPadding(8)
+        .tickFormat((d) => `#${d}`);
 
       if (doTransition) {
-        g.select<SVGGElement>(".x-axis").transition().duration(dur).call(xAxis).on("end", function () { applyAxisStyle(d3.select(this)); });
-        g.select<SVGGElement>(".y-axis").transition().duration(dur).call(yAxis).on("end", function () { applyAxisStyle(d3.select(this)); });
+        // Axes first
+        g.select<SVGGElement>(".x-axis").transition("zoom").duration(dur).ease(d3.easeCubicInOut)
+          .call(xAxis).on("end", function () { styleAxis(d3.select(this)); });
+        g.select<SVGGElement>(".y-axis").transition("zoom").duration(dur).ease(d3.easeCubicInOut)
+          .call(yAxis).on("end", function () { styleAxis(d3.select(this)); });
+
+        // Data elements 100ms after axes
+        const dataDelay = 100;
+        dataG.selectAll<SVGPathElement, DataPoint[]>(".rise-area").transition("zoom").delay(dataDelay).duration(dur)
+          .ease(d3.easeCubicInOut).attr("d", areaGen as unknown as string);
+        dataG.selectAll<SVGPathElement, DataPoint[]>(".rise-line:not(.single-point-dot)").transition("zoom").delay(dataDelay).duration(dur)
+          .ease(d3.easeCubicInOut).attr("d", lineGen as unknown as string);
+        dataG.selectAll<SVGCircleElement, unknown>(".single-point-dot").each(function () {
+          const el = d3.select(this);
+          el.transition("zoom").delay(dataDelay).duration(dur).ease(d3.easeCubicInOut)
+            .attr("cx", x(pd(el.attr("data-week")!)!)).attr("cy", y(parseInt(el.attr("data-rank")!)));
+        });
       } else {
-        g.select<SVGGElement>(".x-axis").call(xAxis); applyAxisStyle(g.select<SVGGElement>(".x-axis"));
-        g.select<SVGGElement>(".y-axis").call(yAxis); applyAxisStyle(g.select<SVGGElement>(".y-axis"));
+        g.select<SVGGElement>(".x-axis").call(xAxis); styleAxis(g.select<SVGGElement>(".x-axis"));
+        g.select<SVGGElement>(".y-axis").call(yAxis); styleAxis(g.select<SVGGElement>(".y-axis"));
+        dataG.selectAll<SVGPathElement, DataPoint[]>(".rise-area").attr("d", areaGen as unknown as string);
+        dataG.selectAll<SVGPathElement, DataPoint[]>(".rise-line:not(.single-point-dot)").attr("d", lineGen as unknown as string);
+        dataG.selectAll<SVGCircleElement, unknown>(".single-point-dot").each(function () {
+          const el = d3.select(this);
+          el.attr("cx", x(pd(el.attr("data-week")!)!)).attr("cy", y(parseInt(el.attr("data-rank")!)));
+        });
       }
 
       // Grid + tier labels
@@ -338,42 +425,51 @@ export default function ChartRiseScrolly({ data, peakRank, chartRunInfo, beat }:
         const el = d3.select(this);
         const rank = parseInt(el.attr("data-rank") || "0");
         const ny = y(rank);
-        if (doTransition) el.transition().duration(dur).attr("y1", ny).attr("y2", ny);
-        else el.attr("y1", ny).attr("y2", ny);
+        const visible = rank >= yDomain[1] && rank <= yDomain[0];
+        if (doTransition) {
+          el.transition("zoom").duration(dur).ease(d3.easeCubicInOut)
+            .attr("y1", ny).attr("y2", ny).attr("opacity", visible ? 0.15 : 0);
+        } else {
+          el.attr("y1", ny).attr("y2", ny).attr("opacity", visible ? 0.15 : 0);
+        }
       });
       g.selectAll<SVGTextElement, unknown>(".tier-label").each(function () {
         const el = d3.select(this);
         const rank = parseInt(el.attr("data-rank") || "0");
-        if (doTransition) el.transition().duration(dur).attr("y", y(rank));
-        else el.attr("y", y(rank));
+        // Hide tier labels outside the visible domain range (prevents overlapping when zoomed)
+        const visible = rank >= yDomain[1] && rank <= yDomain[0];
+        if (doTransition) {
+          el.transition("zoom").duration(dur).ease(d3.easeCubicInOut)
+            .attr("y", y(rank)).attr("opacity", visible ? 1 : 0);
+        } else {
+          el.attr("y", y(rank)).attr("opacity", visible ? 1 : 0);
+        }
       });
-
-      // Paths
-      if (doTransition) {
-        dataG.selectAll<SVGPathElement, DataPoint[]>(".rise-area").transition().duration(dur).attr("d", areaGen as unknown as string);
-        dataG.selectAll<SVGPathElement, DataPoint[]>(".rise-line").transition().duration(dur).attr("d", lineGen as unknown as string);
-      } else {
-        dataG.selectAll<SVGPathElement, DataPoint[]>(".rise-area").attr("d", areaGen as unknown as string);
-        dataG.selectAll<SVGPathElement, DataPoint[]>(".rise-line").attr("d", lineGen as unknown as string);
-      }
 
       // Peak position
       const peakPoint = sorted.reduce((best, d) => d.rank < best.rank ? d : best);
       const npx = x(pd(peakPoint.week)!);
       const npy = y(peakPoint.rank);
       if (doTransition) {
-        dataG.select(".rise-peak-dot").transition().duration(dur).attr("cx", npx).attr("cy", npy);
-        dataG.select(".rise-peak-label").transition().duration(dur).attr("x", npx).attr("y", npy - 18);
+        const dataDelay = 100;
+        g.select(".rise-peak-dot").transition("zoom").delay(dataDelay).duration(dur)
+          .ease(d3.easeCubicInOut).attr("cx", npx).attr("cy", npy);
+        g.select(".rise-peak-label").transition("zoom").delay(dataDelay).duration(dur)
+          .ease(d3.easeCubicInOut).attr("x", npx).attr("y", npy - 18);
       } else {
-        dataG.select(".rise-peak-dot").attr("cx", npx).attr("cy", npy);
-        dataG.select(".rise-peak-label").attr("x", npx).attr("y", npy - 18);
+        g.select(".rise-peak-dot").attr("cx", npx).attr("cy", npy);
+        g.select(".rise-peak-label").attr("x", npx).attr("y", npy - 18);
       }
 
       // Stream bars
-      const barWidth = Math.max(2, w / sorted.length - 1);
+      const barWidth = Math.max(2, W / sorted.length - 1);
       const sb = dataG.selectAll<SVGRectElement, DataPoint>(".stream-bar");
-      if (doTransition) sb.transition().duration(dur).attr("x", (d) => x(pd(d.week)!) - barWidth / 2).attr("width", barWidth);
-      else sb.attr("x", (d) => x(pd(d.week)!) - barWidth / 2).attr("width", barWidth);
+      if (doTransition) {
+        sb.transition("zoom").delay(100).duration(dur).ease(d3.easeCubicInOut)
+          .attr("x", (d) => x(pd(d.week)!) - barWidth / 2).attr("width", barWidth);
+      } else {
+        sb.attr("x", (d) => x(pd(d.week)!) - barWidth / 2).attr("width", barWidth);
+      }
 
       // Gap indicators
       if (hasReentries) {
@@ -389,109 +485,123 @@ export default function ChartRiseScrolly({ data, peakRank, chartRunInfo, beat }:
             { px: nx2 - gw * 0.15, py: y(OFF_CHART_RANK) }, { px: nx2, py: y(r2) },
           ];
           const np = d3.line<typeof ld[0]>().x((d) => d.px).y((d) => d.py).curve(d3.curveBasis)(ld)!;
-          if (doTransition) el.transition().duration(dur).attr("d", np);
+          if (doTransition) el.transition("zoom").delay(100).duration(dur).ease(d3.easeCubicInOut).attr("d", np);
           else el.attr("d", np);
         });
         dataG.selectAll<SVGTextElement, unknown>(".gap-label").each(function () {
           const el = d3.select(this);
           const nx1 = x(pd(el.attr("data-week1")!)!);
           const nx2 = x(pd(el.attr("data-week2")!)!);
-          if (doTransition) el.transition().duration(dur).attr("x", (nx1 + nx2) / 2).attr("y", y(OFF_CHART_RANK) + 16);
+          if (doTransition) el.transition("zoom").delay(100).duration(dur).ease(d3.easeCubicInOut).attr("x", (nx1 + nx2) / 2).attr("y", y(OFF_CHART_RANK) + 16);
           else el.attr("x", (nx1 + nx2) / 2).attr("y", y(OFF_CHART_RANK) + 16);
         });
         dataG.selectAll<SVGCircleElement, unknown>(".reentry-dot").each(function () {
           const el = d3.select(this);
-          if (doTransition) el.transition().duration(dur).attr("cx", x(pd(el.attr("data-week")!)!)).attr("cy", y(parseInt(el.attr("data-rank")!)));
+          if (doTransition) el.transition("zoom").delay(100).duration(dur).ease(d3.easeCubicInOut).attr("cx", x(pd(el.attr("data-week")!)!)).attr("cy", y(parseInt(el.attr("data-rank")!)));
           else el.attr("cx", x(pd(el.attr("data-week")!)!)).attr("cy", y(parseInt(el.attr("data-rank")!)));
         });
-        dataG.selectAll<SVGTextElement, unknown>(".reentry-label").each(function () {
+        g.selectAll<SVGTextElement, unknown>(".reentry-label").each(function () {
           const el = d3.select(this);
-          if (doTransition) el.transition().duration(dur).attr("x", x(pd(el.attr("data-week")!)!) + 10).attr("y", y(parseInt(el.attr("data-rank")!)) - 6);
+          if (doTransition) el.transition("zoom").delay(100).duration(dur).ease(d3.easeCubicInOut).attr("x", x(pd(el.attr("data-week")!)!) + 10).attr("y", y(parseInt(el.attr("data-rank")!)) - 6);
           else el.attr("x", x(pd(el.attr("data-week")!)!) + 10).attr("y", y(parseInt(el.attr("data-rank")!)) - 6);
         });
       }
     }
 
-    // Visibility
+    // Visibility — handles both forward entrance and backward exit
     if (beat >= 1) {
       dataG.selectAll<SVGPathElement, DataPoint[]>(".rise-area").each(function () {
         const el = d3.select(this);
-        if (shouldAnimate && prevBeat < 1) el.transition().duration(400).attr("opacity", 0.06);
+        if (shouldAnimate && isForward && prevBeat < 1) el.transition("vis").duration(400).attr("opacity", 0.06);
         else el.attr("opacity", 0.06);
       });
-      dataG.selectAll<SVGPathElement, DataPoint[]>(".rise-line").each(function () {
+      dataG.selectAll<SVGPathElement, DataPoint[]>(".rise-line:not(.single-point-dot)").each(function () {
         const el = d3.select(this);
-        if (shouldAnimate && prevBeat < 1) {
+        if (shouldAnimate && isForward && prevBeat < 1) {
           const tl = parseFloat(el.attr("data-total-length") || "0");
           const ri2 = parseInt(el.attr("data-run") || "0");
           el.attr("opacity", 1).attr("stroke-dasharray", `${tl} ${tl}`).attr("stroke-dashoffset", tl)
-            .transition().duration(1000).delay(ri2 * 300).ease(d3.easeCubicOut).attr("stroke-dashoffset", 0);
+            .transition("vis").duration(1200).delay(ri2 * 300).ease(d3.easeCubicOut).attr("stroke-dashoffset", 0);
         } else {
           el.attr("opacity", 1).attr("stroke-dasharray", "none");
         }
       });
+      dataG.selectAll<SVGCircleElement, unknown>(".single-point-dot").each(function () {
+        const el = d3.select(this);
+        if (shouldAnimate && isForward && prevBeat < 1) {
+          el.attr("opacity", 0).transition("vis").duration(400).delay(300).attr("opacity", 1);
+        } else {
+          el.attr("opacity", 1);
+        }
+      });
       if (hasReentries) {
-        if (shouldAnimate && prevBeat < 1) {
-          dataG.selectAll(".gap-connector").transition().delay(500).duration(400).attr("opacity", 0.6);
-          dataG.selectAll(".gap-label").transition().delay(600).duration(300).attr("opacity", 0.8);
-          dataG.selectAll(".reentry-dot").transition().delay(700).duration(300).attr("opacity", 1);
-          dataG.selectAll(".reentry-label").transition().delay(800).duration(300).attr("opacity", 1);
+        if (shouldAnimate && isForward && prevBeat < 1) {
+          dataG.selectAll(".gap-connector").transition("vis").delay(500).duration(400).attr("opacity", 0.6);
+          dataG.selectAll(".gap-label").transition("vis").delay(600).duration(300).attr("opacity", 0.8);
+          dataG.selectAll(".reentry-dot").transition("vis").delay(700).duration(300).attr("opacity", 1);
+          g.selectAll(".reentry-label").transition("vis").delay(800).duration(300).attr("opacity", 1);
         } else {
           dataG.selectAll(".gap-connector").attr("opacity", 0.6);
           dataG.selectAll(".gap-label").attr("opacity", 0.8);
           dataG.selectAll(".reentry-dot").attr("opacity", 1);
-          dataG.selectAll(".reentry-label").attr("opacity", 1);
+          g.selectAll(".reentry-label").attr("opacity", 1);
         }
       }
     } else {
-      dataG.selectAll(".rise-area, .rise-line, .gap-connector, .gap-label, .reentry-dot, .reentry-label").attr("opacity", 0);
+      if (shouldAnimate && prevBeat >= 1) {
+        dataG.selectAll(".rise-area, .rise-line, .gap-connector, .gap-label, .reentry-dot")
+          .transition("vis").duration(400).attr("opacity", 0);
+        g.selectAll(".reentry-label").transition("vis").duration(400).attr("opacity", 0);
+      } else {
+        dataG.selectAll(".rise-area, .rise-line, .gap-connector, .gap-label, .reentry-dot").attr("opacity", 0);
+        g.selectAll(".reentry-label").attr("opacity", 0);
+      }
     }
 
     if (beat >= 2) {
-      if (shouldAnimate && prevBeat < 2) {
-        dataG.select(".rise-peak-dot").attr("r", 0).attr("opacity", 1).transition().duration(400).attr("r", 7);
-        dataG.select(".rise-peak-label").attr("opacity", 0).transition().delay(200).duration(300).attr("opacity", 1);
+      if (shouldAnimate && isForward && prevBeat < 2) {
+        g.select(".rise-peak-dot").attr("r", 0).attr("opacity", 1).transition("vis").duration(400).ease(d3.easeCubicOut).attr("r", 7);
+        g.select(".rise-peak-label").attr("opacity", 0).transition("vis").delay(200).duration(300).attr("opacity", 1);
       } else {
-        dataG.select(".rise-peak-dot").attr("r", 7).attr("opacity", 1);
-        dataG.select(".rise-peak-label").attr("opacity", 1);
+        g.select(".rise-peak-dot").attr("r", 7).attr("opacity", 1);
+        g.select(".rise-peak-label").attr("opacity", 1);
       }
     } else {
-      dataG.select(".rise-peak-dot").attr("opacity", 0);
-      dataG.select(".rise-peak-label").attr("opacity", 0);
+      if (shouldAnimate && prevBeat >= 2) {
+        g.select(".rise-peak-dot").transition("vis").duration(300).attr("opacity", 0);
+        g.select(".rise-peak-label").transition("vis").duration(300).attr("opacity", 0);
+      } else {
+        g.select(".rise-peak-dot").attr("opacity", 0);
+        g.select(".rise-peak-label").attr("opacity", 0);
+      }
     }
 
     if (beat >= 3) {
-      if (shouldAnimate && prevBeat < 3) {
-        dataG.selectAll(".stream-bar").attr("opacity", 0).transition().duration(400).delay((_, i) => i * 10).attr("opacity", 0.4);
-        g.select(".stream-label").attr("opacity", 0).transition().delay(300).duration(300).attr("opacity", 1);
-        g.select(".y-axis-streams").attr("opacity", 0).transition().delay(200).duration(400).attr("opacity", 1);
+      if (shouldAnimate && isForward && prevBeat < 3) {
+        dataG.selectAll(".stream-bar").attr("opacity", 0).transition("vis").duration(400).delay((_, i) => Math.min(i * 10, 450)).attr("opacity", 0.4);
+        g.select(".stream-label").attr("opacity", 0).transition("vis").delay(300).duration(300).attr("opacity", 1);
+        g.select(".y-axis-streams").attr("opacity", 0).transition("vis").delay(200).duration(400).attr("opacity", 1);
       } else {
         dataG.selectAll(".stream-bar").attr("opacity", 0.4);
         g.select(".stream-label").attr("opacity", 1);
         g.select(".y-axis-streams").attr("opacity", 1);
       }
     } else {
-      dataG.selectAll(".stream-bar").attr("opacity", 0);
-      g.select(".stream-label").attr("opacity", 0);
-      g.select(".y-axis-streams").attr("opacity", 0);
+      if (shouldAnimate && prevBeat >= 3) {
+        dataG.selectAll(".stream-bar").transition("vis").duration(400).attr("opacity", 0);
+        g.select(".stream-label").transition("vis").duration(300).attr("opacity", 0);
+        g.select(".y-axis-streams").transition("vis").duration(300).attr("opacity", 0);
+      } else {
+        dataG.selectAll(".stream-bar").attr("opacity", 0);
+        g.select(".stream-label").attr("opacity", 0);
+        g.select(".y-axis-streams").attr("opacity", 0);
+      }
     }
   }, [data, beat, peakRank, runs, hasReentries]);
 
   return (
-    <div className="rounded-2xl border border-zinc-800 bg-surface p-4">
+    <div>
       <svg ref={svgRef} className="w-full" role="img" aria-label={`Chart showing rank trajectory with peak at #${peakRank}`} />
-      {hasReentries && beat >= 1 && (
-        <p className="mt-2 text-center text-xs text-muted">
-          <span className="inline-flex items-center gap-1.5">
-            <span className="inline-block h-2 w-2 rounded-full bg-red-500" />
-            Re-entry points
-          </span>
-          <span className="mx-2">{"\u00B7"}</span>
-          <span className="text-red-400">Dashed = off chart</span>
-          <span className="mx-2">{"\u00B7"}</span>
-          {chartRunInfo ? `${chartRunInfo.totalRuns} chart runs` : `${runs.length} chart runs`}
-        </p>
-      )}
     </div>
   );
 }

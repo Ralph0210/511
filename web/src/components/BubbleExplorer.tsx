@@ -51,13 +51,16 @@ type Song3D = BubbleSong & {
 const CATEGORY_DESCRIPTIONS: Record<string, Record<string, string>> = {
   genre: {
     Pop: "Catchy hooks and sing-along melodies built for the widest audience",
-    "Hip Hop/Rap": "Beats, bars, and wordplay — from trap bangers to lyrical storytelling",
+    "Hip Hop/Rap":
+      "Beats, bars, and wordplay — from trap bangers to lyrical storytelling",
     Latin: "Reggaeton, bachata, and Latin pop driving a global takeover",
     "R&B": "Smooth vocals and soulful production rooted in rhythm and blues",
     Rock: "Guitars and grit — from indie anthems to arena-sized riffs",
-    "EDM/Dance": "Synth-driven drops and four-on-the-floor beats made for the dancefloor",
+    "EDM/Dance":
+      "Synth-driven drops and four-on-the-floor beats made for the dancefloor",
     Country: "Storytelling, steel guitar, and heartland americana",
-    "K-Pop": "Precision choreography and high-gloss production from South Korea",
+    "K-Pop":
+      "Precision choreography and high-gloss production from South Korea",
     Afrobeats: "Infectious West African rhythms crossing over worldwide",
   },
   longevity: {
@@ -187,7 +190,9 @@ export default function BubbleExplorer({ songs }: Props) {
   const [activeCategory, setActiveCategory] = useState<string | null>(null)
   const [depthAxis, setDepthAxis] = useState<DepthAxisType>("streams")
   const [hoveredSong, setHoveredSong] = useState<BubbleSong | null>(null)
-  const [hoveredCategory, setHoveredCategory] = useState<CategoryNode | null>(null)
+  const [hoveredCategory, setHoveredCategory] = useState<CategoryNode | null>(
+    null,
+  )
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 })
   const [selectedSong, setSelectedSong] = useState<BubbleSong | null>(null)
 
@@ -270,7 +275,10 @@ export default function BubbleExplorer({ songs }: Props) {
 
     // Shared blur filter for background album art
     const blurFilter = defs.append("filter").attr("id", "bg-blur")
-    blurFilter.append("feGaussianBlur").attr("in", "SourceGraphic").attr("stdDeviation", 12)
+    blurFilter
+      .append("feGaussianBlur")
+      .attr("in", "SourceGraphic")
+      .attr("stdDeviation", 12)
 
     for (const node of nodes) {
       const id = svgId(node.key)
@@ -865,7 +873,7 @@ export default function BubbleExplorer({ songs }: Props) {
       const triY = hudTop + camProgress * hudH
       const triX = hudX - hudHelixR - 8
 
-      // Triangle indicator
+      // Triangle indicator (points right toward helix)
       ctx.beginPath()
       ctx.moveTo(triX, triY - 5)
       ctx.lineTo(triX + 7, triY)
@@ -876,14 +884,14 @@ export default function BubbleExplorer({ songs }: Props) {
 
       // Current metric value label next to triangle
       ctx.fillStyle = "#fff"
-      ctx.font = "600 11px Inter, system-ui, sans-serif"
+      ctx.font = "600 13px Inter, system-ui, sans-serif"
       ctx.textAlign = "right"
       ctx.textBaseline = "middle"
-      ctx.fillText(fmtMetric(currentMetric), triX - 4, triY)
+      ctx.fillText(fmtMetric(currentMetric), triX - 6, triY)
 
       // Top label = max metric value
       ctx.fillStyle = "#71717a"
-      ctx.font = "500 10px Inter, system-ui, sans-serif"
+      ctx.font = "500 12px Inter, system-ui, sans-serif"
       ctx.textAlign = "center"
       ctx.textBaseline = "bottom"
       ctx.fillText(fmtMetric(maxVal), hudX, hudTop - 6)
@@ -900,10 +908,10 @@ export default function BubbleExplorer({ songs }: Props) {
             ? "Weeks on Chart"
             : "Peak Rank"
       ctx.fillStyle = "#52525b"
-      ctx.font = "500 9px Inter, system-ui, sans-serif"
+      ctx.font = "500 12px Inter, system-ui, sans-serif"
       ctx.textAlign = "center"
       ctx.textBaseline = "bottom"
-      ctx.fillText(depthLabel, hudX, hudTop - 18)
+      ctx.fillText(depthLabel, hudX, hudTop - 20)
 
       // Scroll hint
       if (cameraZ < 50) {
@@ -1353,7 +1361,6 @@ export default function BubbleExplorer({ songs }: Props) {
             overflow: "hidden",
           }}
         />
-
       </div>
 
       {/* Layer 2 song tooltip */}
@@ -1370,7 +1377,10 @@ export default function BubbleExplorer({ songs }: Props) {
             zIndex: 99999,
           }}
         >
-          <p className="text-sm font-semibold" style={{ color: hoveredCategory.color }}>
+          <p
+            className="text-sm font-semibold"
+            style={{ color: hoveredCategory.color }}
+          >
             {hoveredCategory.label}
           </p>
           <p className="mt-1 text-xs text-[#B3B3B3]">

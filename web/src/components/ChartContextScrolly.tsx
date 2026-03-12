@@ -50,7 +50,7 @@ export default function ChartContextScrolly({
 
       const container = svgRef.current.parentElement!;
       const width = container.clientWidth;
-      const height = 380;
+      const height = 500;
       svg.attr("width", width).attr("height", height)
         .attr("viewBox", `0 0 ${width} ${height}`)
         .attr("preserveAspectRatio", "xMidYMid meet");
@@ -256,17 +256,8 @@ export default function ChartContextScrolly({
   }, [data, highlightGenre]);
 
   return (
-    <div className="rounded-2xl border border-zinc-800 bg-[#181818] p-4">
+    <div>
       <svg ref={svgRef} className="w-full" />
-      {beat >= 2 && (
-        <p className="mt-2 text-center text-xs text-muted">
-          <span className="font-semibold" style={{ color: GENRE_COLORS[highlightGenre] }}>
-            {highlightGenre}
-          </span>
-          {" "}highlighted
-          {beat >= 3 && " \u00B7 Green band marks this song\u2019s time on chart"}
-        </p>
-      )}
     </div>
   );
 }

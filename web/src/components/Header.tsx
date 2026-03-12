@@ -22,11 +22,11 @@ export default function Header() {
         {/* Logo */}
         <Link href="/" className="flex items-center gap-2">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-sm font-bold text-black">
-            CP
+            511
           </div>
           {!overlayContent && (
             <span className="text-lg font-semibold tracking-tight text-white">
-              ChartPulse
+              Team 3
             </span>
           )}
         </Link>

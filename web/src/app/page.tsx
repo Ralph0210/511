@@ -1,26 +1,26 @@
-import BubbleExplorer from "@/components/BubbleExplorer";
-import VizPreviewCard from "@/components/VizPreviewCard";
+import BubbleExplorer from "@/components/BubbleExplorer"
+import VizPreviewCard from "@/components/VizPreviewCard"
 import {
   fetchBubbleData,
   fetchBubbleAudioFeatures,
   fetchHomepageData,
-} from "@/lib/featured-exemplars";
+} from "@/lib/featured-exemplars"
 
-export const dynamic = "force-dynamic";
+export const dynamic = "force-dynamic"
 
 export default async function Home() {
   const [songs, { exemplars, stats }] = await Promise.all([
     fetchBubbleData().then(async (s) => {
-      await fetchBubbleAudioFeatures(s);
-      return s;
+      await fetchBubbleAudioFeatures(s)
+      return s
     }),
     fetchHomepageData(),
-  ]);
+  ])
 
   // Pick 2 most contrasting songs per viz
-  const longevitySongs = exemplars.longevity.slice(0, 2);
-  const anatomySongs = exemplars.songAnatomy.slice(0, 2);
-  const genreSongs = exemplars.genrePulse.slice(0, 2);
+  const longevitySongs = exemplars.longevity.slice(0, 2)
+  const anatomySongs = exemplars.songAnatomy.slice(0, 2)
+  const genreSongs = exemplars.genrePulse.slice(0, 2)
 
   return (
     <div className="mx-auto max-w-page px-6">
@@ -32,8 +32,9 @@ export default async function Home() {
           <span className="text-accent">Spotify Top 200</span>
         </h1>
         <p className="mt-4 max-w-xl text-lg text-muted">
-          {songs.length.toLocaleString()} songs from Spotify Top 200. Click a
-          category to explore its songs — zoom deeper to discover more.
+          {songs.length.toLocaleString()} songs from Spotify Top 200 from
+          2017-2021. Click a category to explore its songs — zoom deeper to
+          discover more.
         </p>
       </div>
 
@@ -71,5 +72,5 @@ export default async function Home() {
         </div>
       </div>
     </div>
-  );
+  )
 }

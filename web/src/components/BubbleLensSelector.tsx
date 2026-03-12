@@ -111,14 +111,14 @@ export default function BubbleLensSelector({
           <>
             <div className="h-5 w-px bg-zinc-700" />
             <div className="flex items-center gap-2">
-              <span className="text-xs font-medium text-zinc-500">Depth:</span>
+              <span className="text-sm font-medium text-zinc-500">Depth:</span>
               {DEPTH_AXES.map(({ id, label }) => {
                 const isActive = depthAxis === id;
                 return (
                   <button
                     key={id}
                     onClick={() => onDepthChange(id)}
-                    className={`whitespace-nowrap rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                    className={`whitespace-nowrap rounded-full px-4 py-2 text-sm font-medium transition-colors ${
                       isActive
                         ? "bg-white/15 text-white"
                         : "text-zinc-500 hover:text-zinc-300"

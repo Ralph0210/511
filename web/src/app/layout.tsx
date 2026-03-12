@@ -11,7 +11,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "ChartPulse — Music Industry Trends & Song Stories",
+  title: "Team 3 — Music Industry Trends & Song Stories",
   description:
     "Explore how songs rise, fall, and reshape the music industry through interactive data visualizations and scrollytelling narratives.",
 };
