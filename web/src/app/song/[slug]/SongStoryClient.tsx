@@ -6,11 +6,9 @@ import StickyScrolly, { type ScrollBeat } from "@/components/StickyScrolly";
 import SplitScrolly from "@/components/SplitScrolly";
 import ChartRiseScrolly from "@/components/ChartRiseScrolly";
 import ChartSoundScrolly from "@/components/ChartSoundScrolly";
-import ChartMomentScrolly from "@/components/ChartMomentScrolly";
 import ChartStayingPowerScrolly from "@/components/ChartStayingPowerScrolly";
 import type { SongStoryChapter } from "@/data/featured-songs";
 import type { SongPageData } from "./page";
-import type { PeerSong } from "@/lib/narrative-generator";
 
 type Props = {
   trackName: string;
@@ -26,13 +24,11 @@ type Props = {
   genre: string;
 };
 
-const CHAPTER_TITLES = ["The Rise", "The Sound", "The Moment", "The Staying Power"];
-
 function chapterBeats(chapter: SongStoryChapter): ScrollBeat[] {
   if (chapter.beats?.length) {
     return chapter.beats.map((text, i) => ({
       id: `${chapter.title}-${i}`,
-      text: <p className="leading-relaxed text-muted">{text}</p>,
+      text: <p className="leading-relaxed">{text}</p>,
     }));
   }
   const sentences = chapter.narrative.match(/[^.!?]+[.!?]+/g) || [chapter.narrative];
@@ -87,21 +83,18 @@ function ChapterHeader({ chapter, index, total }: { chapter: SongStoryChapter; i
 export default function SongStoryClient({ trackName, chapters, outro, songData, genre }: Props) {
   const [riseBeat, setRiseBeat] = useState(-1);
   const [soundBeat, setSoundBeat] = useState(-1);
-  const [momentBeat, setMomentBeat] = useState(-1);
   const [stayingBeat, setStayingBeat] = useState(-1);
 
   const handleRiseBeat = useCallback((i: number) => setRiseBeat(i), []);
   const handleSoundBeat = useCallback((i: number) => setSoundBeat(i), []);
-  const handleMomentBeat = useCallback((i: number) => setMomentBeat(i), []);
   const handleStayingBeat = useCallback((i: number) => setStayingBeat(i), []);
 
   const riseBeats = chapterBeats(chapters.rise);
   const soundBeats = chapterBeats(chapters.sound);
-  const momentBeats = chapterBeats(chapters.moment);
   const stayingPowerChapter = chapters.stayingPower;
   const stayingBeats = stayingPowerChapter ? chapterBeats(stayingPowerChapter) : [];
 
-  const totalChapters = stayingPowerChapter ? 4 : 3;
+  const totalChapters = stayingPowerChapter ? 3 : 2;
 
   return (
     <div className="py-16 space-y-32">
@@ -147,47 +140,26 @@ export default function SongStoryClient({ trackName, chapters, outro, songData, 
         )}
       </section>
 
-      {/* Chapter 3: The Moment */}
-      <section>
-        <div className="mx-auto max-w-6xl px-6">
-          <ChapterHeader chapter={chapters.moment} index={2} total={totalChapters} />
-        </div>
-        {songData ? (
-          <StickyScrolly beats={momentBeats} onBeatChange={handleMomentBeat}>
-            <ChartMomentScrolly
-              peerSongs={songData.peerSongs}
-              songTrackName={trackName}
-              songPeakRank={songData.peakRank}
-              songPeakStreams={songData.songPeakStreams}
-              totalChartStreams={songData.totalChartStreams}
-              genreShares={songData.genreShares}
-              highlightGenre={genre}
-              songFirstWeek={songData.firstWeek}
-              songLastWeek={songData.lastWeek}
-              beat={momentBeat}
-            />
-          </StickyScrolly>
-        ) : (
-          <div className="flex h-64 items-center justify-center rounded-2xl border border-dashed border-zinc-700 text-sm text-muted">
-            Context data unavailable
-          </div>
-        )}
-      </section>
-
-      {/* Chapter 4: The Staying Power */}
+      {/* Chapter 3: The Staying Power */}
       {stayingPowerChapter && songData && songData.spotifyLifespan && (
         <section>
           <div className="mx-auto max-w-6xl px-6">
-            <ChapterHeader chapter={stayingPowerChapter} index={3} total={totalChapters} />
+            <ChapterHeader chapter={stayingPowerChapter} index={2} total={totalChapters} />
           </div>
           <StickyScrolly beats={stayingBeats} onBeatChange={handleStayingBeat}>
             <ChartStayingPowerScrolly
               spotifyDistribution={songData.spotifyLifespan.yearDistribution}
+              genreDistribution={songData.spotifyLifespan.genreDistribution}
               songWeeks={songData.weeksOnChart}
               yearAvg={songData.spotifyLifespan.yearAvg}
               genreAvg={songData.spotifyLifespan.genreAvg}
               genreLabel={songData.spotifyLifespan.genreLabel}
               percentileInYear={songData.spotifyLifespan.percentileInYear}
+              categoryDistribution={songData.longevityCategory?.categoryDistribution}
+              songCategory={songData.longevityCategory?.songCategory}
+              sameCategoryCount={songData.longevityCategory?.sameCategoryCount}
+              percentileInCategory={songData.longevityCategory?.percentileInCategory}
+              totalSongs={songData.longevityCategory?.totalSongs}
               billboardDistribution={songData.billboardData?.longevityDistribution}
               billboardWeeks={songData.billboardData?.totalWeeks}
               billboardPercentile={songData.billboardData?.longevityPercentile}

@@ -126,13 +126,13 @@ export default function ChartLifespanScrolly({ data, beat }: Props) {
         .attr("fill", "none").attr("stroke", AMBER).attr("stroke-width", 2.5)
         .attr("opacity", 0);
 
-      // Beat 2: Era markers
+      // Beat 2: Era marker lines (behind data)
       const eras = [
         { year: 1991, label: "SoundScan" },
         { year: 2005, label: "Digital sales" },
         { year: 2012, label: "Streaming" },
       ];
-      eras.forEach(({ year, label }) => {
+      eras.forEach(({ year }) => {
         if (year > (d3.max(data, (d) => d.debut_year) || 2026)) return;
         g.append("line")
           .attr("class", "era-marker")
@@ -140,13 +140,6 @@ export default function ChartLifespanScrolly({ data, beat }: Props) {
           .attr("y1", 0).attr("y2", h)
           .attr("stroke", AMBER_DARK).attr("stroke-dasharray", "4,3")
           .attr("stroke-width", 1).attr("opacity", 0);
-
-        g.append("text")
-          .attr("class", "era-marker")
-          .attr("x", x(year) + 4).attr("y", 12)
-          .attr("font-size", 12).attr("fill", AMBER_DARK).attr("font-weight", 500)
-          .attr("opacity", 0)
-          .text(label);
       });
 
       // Beat 3: Streaming band
@@ -222,6 +215,17 @@ export default function ChartLifespanScrolly({ data, beat }: Props) {
         .attr("text-anchor", "end").attr("font-size", 12).attr("fill", "#9CA3AF")
         .attr("opacity", 0)
         .text(`68-year avg: ${overallAvg.toFixed(1)}w`);
+
+      // Era marker text labels — appended last so they render above all chart elements
+      eras.forEach(({ year, label }) => {
+        if (year > (d3.max(data, (d) => d.debut_year) || 2026)) return;
+        g.append("text")
+          .attr("class", "era-marker-text")
+          .attr("x", x(year) + 4).attr("y", 12)
+          .attr("font-size", 12).attr("fill", AMBER_DARK).attr("font-weight", 500)
+          .attr("opacity", 0)
+          .text(label);
+      });
     }
 
     // --- Update visibility ---
@@ -276,15 +280,18 @@ export default function ChartLifespanScrolly({ data, beat }: Props) {
       g.select(".lifespan-line-full").attr("opacity", 0);
     }
 
-    // Beat 2: Era markers
+    // Beat 2: Era markers (lines + text labels)
     if (beat >= 2) {
       if (shouldAnimate && prevBeat < 2) {
         g.selectAll(".era-marker").transition().delay(200).duration(400).attr("opacity", 0.5);
+        g.selectAll(".era-marker-text").transition().delay(200).duration(400).attr("opacity", 0.5);
       } else {
         g.selectAll(".era-marker").attr("opacity", 0.5);
+        g.selectAll(".era-marker-text").attr("opacity", 0.5);
       }
     } else {
       g.selectAll(".era-marker").attr("opacity", 0);
+      g.selectAll(".era-marker-text").attr("opacity", 0);
     }
 
     // Beat 3: Streaming band + era averages

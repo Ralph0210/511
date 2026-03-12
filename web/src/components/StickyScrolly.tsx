@@ -75,7 +75,7 @@ export default function StickyScrolly({ beats, onBeatChange, children, className
       {/* Beat 0: static, directly below chapter title */}
       {beats.length > 0 && (
         <div className="mx-auto max-w-6xl px-6 mb-6">
-          <div className="max-w-[70%] text-lg font-bold leading-snug text-white sm:text-xl md:text-2xl">
+          <div className="max-w-[70%] text-lg font-bold leading-snug text-muted sm:text-xl md:text-2xl">
             {beats[0].text}
           </div>
         </div>
@@ -99,11 +99,13 @@ export default function StickyScrolly({ beats, onBeatChange, children, className
             <div
               key={beat.id}
               ref={(el) => { beatRefs.current[i] = el; }}
-              className={`mx-auto mb-[45vh] max-w-6xl px-6 transition-opacity duration-700 ${
-                i <= activeIndex ? "opacity-100" : "opacity-[0.08]"
+              className={`mx-auto mb-[60vh] max-w-6xl px-6 transition-opacity duration-700 ${
+                i <= activeIndex ? "opacity-100" : "opacity-[0.05]"
               }`}
             >
-              <div className="max-w-[70%] text-lg font-bold leading-snug text-white sm:text-xl md:text-2xl">
+              <div className={`max-w-[70%] text-lg font-bold leading-snug sm:text-xl md:text-2xl ${
+                i <= activeIndex ? "text-muted" : "text-white"
+              }`}>
                 {beat.text}
               </div>
             </div>

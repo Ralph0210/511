@@ -21,7 +21,7 @@ type SongStats = {
   songFeatures: {
     danceability: number;
     energy: number;
-    valence: number;
+    duration: number;
     acousticness: number;
     speechiness: number;
     tempo: number;
@@ -29,7 +29,7 @@ type SongStats = {
   eraAverage: {
     danceability: number;
     energy: number;
-    valence: number;
+    duration: number;
     acousticness: number;
     speechiness: number;
     tempo: number;
@@ -125,7 +125,7 @@ export type SongClassification = "viral-spike" | "slow-burn" | "steady-performer
 
 export function classifySong(stats: SongStats): { label: string; classification: SongClassification } {
   const runInfo = stats.chartRunInfo ?? analyzeChartRuns(stats.trajectory);
-  const features = ["danceability", "energy", "valence", "acousticness", "speechiness"] as const;
+  const features = ["danceability", "energy", "duration", "acousticness", "speechiness"] as const;
   const maxDelta = Math.max(...features.map((f) => Math.abs(stats.songFeatures[f] - stats.eraAverage[f])));
 
   if (runInfo.hasReentries && runInfo.totalRuns >= 3) return { label: "Comeback King", classification: "comeback-king" };
@@ -192,7 +192,7 @@ function compareWord(val: number, avg: number): string {
 const FEATURE_DEFINITIONS: Record<string, string> = {
   danceability: "how suitable a track is for dancing, based on tempo, rhythm stability, and beat strength",
   energy: "the intensity and activity level — loud, fast, noisy tracks score high",
-  valence: "the musical positivity — high valence sounds happy and cheerful, low valence sounds sad or angry",
+  duration: "the length of the track — shorter songs dominate streaming, longer songs suggest more complex arrangements",
   acousticness: "how acoustic (vs. electronic) the track sounds",
   speechiness: "how much spoken word (vs. singing) is in the track — think rap, poetry, or talk shows",
   tempo: "the speed of the track in beats per minute",
@@ -202,7 +202,7 @@ function featureDescriptor(feature: string, value: number): string {
   const descriptors: Record<string, [string, string]> = {
     danceability: ["groove-driven and rhythmically infectious", "less dance-oriented"],
     energy: ["high-energy and intense", "restrained and mellow"],
-    valence: ["upbeat and musically positive", "darker and more introspective"],
+    duration: ["longer than typical chart hits", "short and stream-friendly"],
     acousticness: ["acoustically rich and organic", "heavily produced and electronic"],
     speechiness: ["vocal-forward and talk-driven", "melodically sung"],
     tempo: ["fast-paced", "slower and more deliberate"],
@@ -266,7 +266,7 @@ function buildSoundNarrative(stats: SongStats): SongStoryChapter {
   const { trackName, songFeatures, eraAverage } = stats;
   const year = stats.firstWeek.slice(0, 4);
 
-  const features = ["danceability", "energy", "valence", "acousticness", "speechiness"] as const;
+  const features = ["danceability", "energy", "duration", "acousticness", "speechiness"] as const;
   const deltas = features.map((f) => ({
     feature: f,
     value: songFeatures[f],
@@ -280,13 +280,13 @@ function buildSoundNarrative(stats: SongStats): SongStoryChapter {
       ? "a high-energy, dance-floor-ready track"
       : songFeatures.acousticness > 0.5
         ? "an acoustically driven record that stands apart from the heavily produced chart norm"
-        : songFeatures.valence < 0.3
-          ? "a sonically moody piece that leans into emotional weight"
+        : songFeatures.duration > 0.6
+          ? "a longer-form track that bucks the streaming-era trend toward brevity"
           : "a song that carves its own sonic lane";
 
   const beat0 = `Its chart trajectory shows how it performed. Now let\u2019s hear what it sounded like \u2014 and how it compared to everything else on the chart in ${year}.`;
 
-  const beat1 = `The gray shape shows the average audio profile of ${year}\u2019s Spotify Top 200. Each axis measures a different quality: danceability (${FEATURE_DEFINITIONS.danceability}), energy (${FEATURE_DEFINITIONS.energy}), valence (${FEATURE_DEFINITIONS.valence}), and more. This is what a "typical" charting song sounded like that year.`;
+  const beat1 = `The gray shape shows the average audio profile of ${year}\u2019s Spotify Top 200. Each axis measures a different quality: danceability (${FEATURE_DEFINITIONS.danceability}), energy (${FEATURE_DEFINITIONS.energy}), duration (${FEATURE_DEFINITIONS.duration}), and more. This is what a "typical" charting song sounded like that year.`;
 
   const beat2 = `Now here\u2019s "${trackName}" in green. It\u2019s ${character}. Where the green shape extends beyond the gray, the song scores higher than average; where it shrinks inside, it scores lower.`;
 
@@ -375,20 +375,15 @@ function buildMomentNarrative(stats: SongStats): SongStoryChapter {
 }
 
 function buildStayingPowerNarrative(stats: SongStats): SongStoryChapter {
-  const { trackName, weeksOnChart, genre, firstWeek, peerSongs } = stats;
+  const { trackName, weeksOnChart, genre, firstWeek } = stats;
   const year = firstWeek.slice(0, 4);
   const sp = stats.spotifyLifespan;
   const bb = stats.billboardData;
 
-  // Beat 0: transition from Moment chapter
-  let beat0: string;
-  if (peerSongs?.length) {
-    const peerCount = peerSongs.length;
-    beat0 = `We saw the ${peerCount} songs competing alongside "${trackName}" at its peak. But how many of them lasted? Let\u2019s see where its ${weeksOnChart}-week run falls among all songs that charted in ${year}.`;
-  } else {
-    beat0 = `The competition was fierce. But how long did "${trackName}" actually survive? Let\u2019s see where its ${weeksOnChart}-week run falls among all songs from ${year}.`;
-  }
+  // Beat 0: intro / transition
+  const beat0 = `We\u2019ve heard how "${trackName}" sounded. Now let\u2019s measure how long it lasted \u2014 and what that means compared to every other song on the chart.`;
 
+  // Beat 1: Spotify histogram + song marker + year avg
   let beat1: string;
   if (sp) {
     const comparison = weeksOnChart > sp.yearAvg
@@ -396,28 +391,15 @@ function buildStayingPowerNarrative(stats: SongStats): SongStoryChapter {
       : weeksOnChart < sp.yearAvg
         ? `below the ${year} average of ${sp.yearAvg.toFixed(1)} weeks`
         : `right at the ${year} average of ${sp.yearAvg.toFixed(1)} weeks`;
-    beat1 = `This histogram shows every song that debuted on the Spotify Top 200 in ${year}. With ${weeksOnChart} weeks, "${trackName}" sits ${comparison}. It outlasted ${sp.percentileInYear}% of the ${sp.totalSongsInYear} songs that charted that year.`;
+    beat1 = `This histogram shows every song that debuted on the Spotify Top 200 in ${year}. With ${weeksOnChart} weeks, "${trackName}" sits ${comparison}, outlasting ${sp.percentileInYear}% of the ${sp.totalSongsInYear} songs that charted that year.`;
   } else {
     beat1 = `"${trackName}" spent ${weeksOnChart} weeks on the Spotify Global Top 200. Each bar shows how many songs lasted that long \u2014 the highlighted bar is where this song falls.`;
   }
 
-  let beat2: string;
-  if (sp) {
-    const genreCompare = weeksOnChart > sp.genreAvg
-      ? `longer than the typical ${genre} song (${sp.genreAvg.toFixed(1)} weeks)`
-      : weeksOnChart < sp.genreAvg
-        ? `shorter than the typical ${genre} song (${sp.genreAvg.toFixed(1)} weeks)`
-        : `right in line with the typical ${genre} song (${sp.genreAvg.toFixed(1)} weeks)`;
-    const overallCompare = sp.genreAvg > sp.yearAvg
-      ? `${genre} songs tend to last longer than average on the chart`
-      : sp.genreAvg < sp.yearAvg
-        ? `${genre} songs tend to have shorter chart runs than average`
-        : `${genre} songs last about as long as the chart average`;
-    beat2 = `Now compare against genre: "${trackName}" lasted ${genreCompare}. ${overallCompare} in ${year}, and this song ${weeksOnChart > sp.genreAvg ? "exceeded" : "fell within"} that pattern.`;
-  } else {
-    beat2 = `Among ${genre} songs on the chart, this run ${weeksOnChart >= 10 ? "stands out as a solid showing" : "was a brief appearance"}.`;
-  }
+  // Beat 2: Longevity categories (viral/lasting/slow_burn/flash)
+  const beat2 = `Across the full 2017\u20132021 dataset, every charting song falls into one of four categories based on impact and endurance. "${trackName}" is classified as a song with ${weeksOnChart >= 15 ? "staying power that few songs achieve" : weeksOnChart >= 8 ? "a solid chart presence" : "a brief but notable appearance"}. The highlighted bar shows where it lands.`;
 
+  // Beat 3: Billboard comparison
   let beat3: string;
   if (bb) {
     const bbPeakDesc = bb.peakRank === 1
@@ -443,13 +425,31 @@ function buildStayingPowerNarrative(stats: SongStats): SongStoryChapter {
         : `Even ${weeksOnChart} weeks on the Spotify Top 200 means competing with the world\u2019s most-streamed songs. The chart moves fast \u2014 a few weeks of chart presence is still a notable achievement.`}`;
   }
 
-  const narrative = `"${trackName}" spent ${weeksOnChart} weeks on the Spotify Global Top 200. ${beat1} ${beat2}`;
+  // Beat 4: Genre distribution overlay on Spotify histogram
+  let beat4: string;
+  if (sp) {
+    const genreCompare = weeksOnChart > sp.genreAvg
+      ? `longer than the typical ${genre} song (${sp.genreAvg.toFixed(1)} weeks)`
+      : weeksOnChart < sp.genreAvg
+        ? `shorter than the typical ${genre} song (${sp.genreAvg.toFixed(1)} weeks)`
+        : `right in line with the typical ${genre} song (${sp.genreAvg.toFixed(1)} weeks)`;
+    const overallCompare = sp.genreAvg > sp.yearAvg
+      ? `${genre} songs tend to last longer than average on the chart`
+      : sp.genreAvg < sp.yearAvg
+        ? `${genre} songs tend to have shorter chart runs than average`
+        : `${genre} songs last about as long as the chart average`;
+    beat4 = `Now let\u2019s overlay just ${genre} songs (in purple) on the same chart. "${trackName}" lasted ${genreCompare}. ${overallCompare} in ${year} \u2014 notice how the purple bars shift compared to the overall distribution. This song ${weeksOnChart > sp.genreAvg ? "exceeded" : "fell within"} that genre pattern.`;
+  } else {
+    beat4 = `Among ${genre} songs on the chart, this run ${weeksOnChart >= 10 ? "stands out as a solid showing" : "was a brief appearance"}.`;
+  }
+
+  const narrative = `"${trackName}" spent ${weeksOnChart} weeks on the Spotify Global Top 200. ${beat1} ${beat4}`;
 
   return {
-    label: "Chapter 4",
+    label: "Chapter 3",
     title: "The Staying Power",
     narrative,
-    beats: [beat0, beat1, beat2, beat3],
+    beats: [beat0, beat1, beat2, beat3, beat4],
   };
 }
 
@@ -480,7 +480,7 @@ export function generateNarrative(stats: SongStats): {
       ? `"${stats.trackName}" by ${stats.artistName} peaked at #${stats.peakRank} during its ${stats.weeksOnChart}-week chart run \u2014 reaching the top tier of global streaming.`
       : `"${stats.trackName}" by ${stats.artistName} charted for ${stats.weeksOnChart} weeks with a peak of #${stats.peakRank}, adding its own data point to the ever-shifting story of what the world listens to.`;
 
-  const features = ["danceability", "energy", "valence", "acousticness", "speechiness"] as const;
+  const features = ["danceability", "energy", "duration", "acousticness", "speechiness"] as const;
   const topDelta = features
     .map((f) => ({ f, delta: Math.abs(stats.songFeatures[f] - stats.eraAverage[f]) }))
     .sort((a, b) => b.delta - a.delta)[0];

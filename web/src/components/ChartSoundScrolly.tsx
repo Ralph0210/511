@@ -6,7 +6,7 @@ import * as d3 from "d3"
 type AudioFeatures = {
   danceability: number
   energy: number
-  valence: number
+  duration: number
   acousticness: number
   speechiness: number
   tempo: number
@@ -29,7 +29,7 @@ type Props = {
 const FEATURE_KEYS: (keyof AudioFeatures)[] = [
   "danceability",
   "energy",
-  "valence",
+  "duration",
   "acousticness",
   "speechiness",
   "tempo",
@@ -38,7 +38,7 @@ const FEATURE_KEYS: (keyof AudioFeatures)[] = [
 const LABELS: Record<string, string> = {
   danceability: "Danceability",
   energy: "Energy",
-  valence: "Valence",
+  duration: "Duration",
   acousticness: "Acousticness",
   speechiness: "Speechiness",
   tempo: "Tempo",

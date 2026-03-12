@@ -65,7 +65,7 @@ export const MOCK_CHART_RUN_INFO: ChartRunInfo = {
 export const MOCK_SONG_FEATURES = {
   danceability: 0.82,
   energy: 0.45,
-  valence: 0.35,
+  duration: 0.52,
   acousticness: 0.72,
   speechiness: 0.15,
   tempo: 0.55,
@@ -74,7 +74,7 @@ export const MOCK_SONG_FEATURES = {
 export const MOCK_ERA_AVERAGE = {
   danceability: 0.68,
   energy: 0.65,
-  valence: 0.50,
+  duration: 0.48,
   acousticness: 0.25,
   speechiness: 0.12,
   tempo: 0.60,
@@ -84,7 +84,7 @@ export const MOCK_ERA_AVERAGE = {
 export const MOCK_SONG_FEATURES_EXTREME = {
   danceability: 0.95,
   energy: 0.20,
-  valence: 0.10,
+  duration: 0.85,
   acousticness: 0.90,
   speechiness: 0.05,
   tempo: 0.30,
@@ -139,13 +139,27 @@ export const MOCK_GENRE_SHARES = makeGenreShares();
 // --- ChartStayingPowerScrolly mock data ---
 
 export const MOCK_SPOTIFY_DISTRIBUTION: SpotifyLifespanBucket[] = [
-  { bucket: "1-3", count: 420 },
-  { bucket: "4-6", count: 280 },
-  { bucket: "7-10", count: 190 },
-  { bucket: "11-15", count: 120 },
-  { bucket: "16-25", count: 75 },
-  { bucket: "26-40", count: 35 },
-  { bucket: "41+", count: 12 },
+  { bucket: "1-5", min: 1, max: 5, count: 480 },
+  { bucket: "6-10", min: 6, max: 10, count: 220 },
+  { bucket: "11-15", min: 11, max: 15, count: 140 },
+  { bucket: "16-20", min: 16, max: 20, count: 85 },
+  { bucket: "21-25", min: 21, max: 25, count: 50 },
+  { bucket: "26-30", min: 26, max: 30, count: 28 },
+  { bucket: "31-35", min: 31, max: 35, count: 15 },
+  { bucket: "36-40", min: 36, max: 40, count: 8 },
+  { bucket: "41-45", min: 41, max: 45, count: 6 },
+];
+
+export const MOCK_GENRE_DISTRIBUTION: SpotifyLifespanBucket[] = [
+  { bucket: "1-5", min: 1, max: 5, count: 120 },
+  { bucket: "6-10", min: 6, max: 10, count: 75 },
+  { bucket: "11-15", min: 11, max: 15, count: 55 },
+  { bucket: "16-20", min: 16, max: 20, count: 38 },
+  { bucket: "21-25", min: 21, max: 25, count: 22 },
+  { bucket: "26-30", min: 26, max: 30, count: 14 },
+  { bucket: "31-35", min: 31, max: 35, count: 8 },
+  { bucket: "36-40", min: 36, max: 40, count: 4 },
+  { bucket: "41-45", min: 41, max: 45, count: 3 },
 ];
 
 export const MOCK_BILLBOARD_DISTRIBUTION: LongevityBucket[] = [

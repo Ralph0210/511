@@ -10,6 +10,7 @@ import {
   MOCK_PEER_SONGS,
   MOCK_GENRE_SHARES,
   MOCK_SPOTIFY_DISTRIBUTION,
+  MOCK_GENRE_DISTRIBUTION,
   MOCK_BILLBOARD_DISTRIBUTION,
 } from "@/stories/mocks/song-deep-dive";
 
@@ -101,6 +102,7 @@ const MOCK_SONG_DATA: SongPageData = {
     percentileInYear: 96,
     totalSongsInYear: 1132,
     yearDistribution: MOCK_SPOTIFY_DISTRIBUTION,
+    genreDistribution: MOCK_GENRE_DISTRIBUTION,
   },
   chartRunInfo: {
     runs: [{ startWeek: "2023-01-06", endWeek: "2023-10-20", weeks: 42, peakRank: 3 }],

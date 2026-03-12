@@ -213,7 +213,32 @@ export default function ChartRiseScrolly({ data, peakRank, chartRunInfo, beat }:
       // Data group (clipped)
       const dataG = g.append("g").attr("class", "data-group").attr("clip-path", "url(#rise-clip)");
 
-      // Gap indicators
+      // Line and area per run
+      const areaGen = d3.area<DataPoint>()
+        .x((d) => x(parseDate(d.week)!)).y0(H).y1((d) => y(d.rank)).curve(d3.curveMonotoneX);
+      const lineGen = d3.line<DataPoint>()
+        .x((d) => x(parseDate(d.week)!)).y((d) => y(d.rank)).curve(d3.curveMonotoneX);
+
+      runs.forEach((run, ri) => {
+        if (run.length === 1) {
+          // Single-point run: line path would be degenerate, draw a circle instead
+          const pt = run[0];
+          dataG.append("circle").attr("class", "rise-line single-point-dot").attr("data-run", ri)
+            .attr("cx", x(parseDate(pt.week)!)).attr("cy", y(pt.rank))
+            .attr("r", 4).attr("fill", "#1DB954").attr("opacity", 0)
+            .attr("data-week", pt.week).attr("data-rank", pt.rank);
+        } else {
+          dataG.append("path").datum(run).attr("d", areaGen)
+            .attr("class", "rise-area").attr("data-run", ri)
+            .attr("fill", "#1DB954").attr("opacity", 0);
+          const path = dataG.append("path").datum(run).attr("d", lineGen)
+            .attr("class", "rise-line").attr("data-run", ri)
+            .attr("fill", "none").attr("stroke", "#1DB954").attr("stroke-width", 2.5).attr("opacity", 0);
+          path.attr("data-total-length", path.node()?.getTotalLength() || 0);
+        }
+      });
+
+      // Gap indicators (appended after lines/areas so they render on top)
       if (hasReentries) {
         for (let i = 0; i < runs.length - 1; i++) {
           const prevRun = runs[i];
@@ -256,31 +281,6 @@ export default function ChartRiseScrolly({ data, peakRank, chartRunInfo, beat }:
           }
         }
       }
-
-      // Line and area per run
-      const areaGen = d3.area<DataPoint>()
-        .x((d) => x(parseDate(d.week)!)).y0(H).y1((d) => y(d.rank)).curve(d3.curveMonotoneX);
-      const lineGen = d3.line<DataPoint>()
-        .x((d) => x(parseDate(d.week)!)).y((d) => y(d.rank)).curve(d3.curveMonotoneX);
-
-      runs.forEach((run, ri) => {
-        if (run.length === 1) {
-          // Single-point run: line path would be degenerate, draw a circle instead
-          const pt = run[0];
-          dataG.append("circle").attr("class", "rise-line single-point-dot").attr("data-run", ri)
-            .attr("cx", x(parseDate(pt.week)!)).attr("cy", y(pt.rank))
-            .attr("r", 4).attr("fill", "#1DB954").attr("opacity", 0)
-            .attr("data-week", pt.week).attr("data-rank", pt.rank);
-        } else {
-          dataG.append("path").datum(run).attr("d", areaGen)
-            .attr("class", "rise-area").attr("data-run", ri)
-            .attr("fill", "#1DB954").attr("opacity", 0);
-          const path = dataG.append("path").datum(run).attr("d", lineGen)
-            .attr("class", "rise-line").attr("data-run", ri)
-            .attr("fill", "none").attr("stroke", "#1DB954").attr("stroke-width", 2.5).attr("opacity", 0);
-          path.attr("data-total-length", path.node()?.getTotalLength() || 0);
-        }
-      });
 
       // Peak annotation (unclipped — extends above chart area)
       const annotG = g.append("g").attr("class", "annotation-group");

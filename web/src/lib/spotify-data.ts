@@ -528,11 +528,13 @@ export async function fetchGenreData(): Promise<GenreRow[]> {
 
 // ---------- Spotify lifespan context for song deep dive ----------
 
-export type SpotifyLifespanBucket = { bucket: string; count: number };
+export type SpotifyLifespanBucket = { bucket: string; min: number; max: number; count: number };
 
 export type SpotifyLifespanContext = {
-  /** Distribution of weeks_on_chart for songs in the same year */
+  /** Distribution of weeks_on_chart for songs in the same year (equal 5-week bins) */
   yearDistribution: SpotifyLifespanBucket[];
+  /** Distribution of weeks_on_chart for songs in the same genre+year */
+  genreDistribution: SpotifyLifespanBucket[];
   /** Average weeks on chart for all songs that year */
   yearAvg: number;
   /** Average weeks on chart for songs in the same genre that year */
@@ -546,20 +548,22 @@ export type SpotifyLifespanContext = {
 };
 
 const SPOTIFY_BUCKET_RANGES = [
-  { label: "1-3", min: 1, max: 3 },
-  { label: "4-6", min: 4, max: 6 },
-  { label: "7-10", min: 7, max: 10 },
+  { label: "1-5", min: 1, max: 5 },
+  { label: "6-10", min: 6, max: 10 },
   { label: "11-15", min: 11, max: 15 },
-  { label: "16-25", min: 16, max: 25 },
-  { label: "26-40", min: 26, max: 40 },
-  { label: "41+", min: 41, max: Infinity },
+  { label: "16-20", min: 16, max: 20 },
+  { label: "21-25", min: 21, max: 25 },
+  { label: "26-30", min: 26, max: 30 },
+  { label: "31-35", min: 31, max: 35 },
+  { label: "36-40", min: 36, max: 40 },
+  { label: "41-45", min: 41, max: 45 },
 ];
 
-function toSpotifyBucket(weeks: number): string {
+function toSpotifyBucket(weeks: number): string | null {
   for (const b of SPOTIFY_BUCKET_RANGES) {
     if (weeks >= b.min && weeks <= b.max) return b.label;
   }
-  return "41+";
+  return null; // beyond histogram range — song marker handles this
 }
 
 /**
@@ -583,7 +587,8 @@ export async function fetchSpotifyLifespanContext(
 
   if (!rows?.length) {
     return {
-      yearDistribution: SPOTIFY_BUCKET_RANGES.map((b) => ({ bucket: b.label, count: 0 })),
+      yearDistribution: SPOTIFY_BUCKET_RANGES.map((b) => ({ bucket: b.label, min: b.min, max: b.max, count: 0 })),
+      genreDistribution: SPOTIFY_BUCKET_RANGES.map((b) => ({ bucket: b.label, min: b.min, max: b.max, count: 0 })),
       yearAvg: 0,
       genreAvg: 0,
       genreLabel: genre,
@@ -604,25 +609,41 @@ export async function fetchSpotifyLifespanContext(
   const fewerThan = allWeeks.filter((w) => w < songWeeks).length;
   const percentileInYear = Math.round((fewerThan / totalSongsInYear) * 100);
 
-  // Build histogram
+  // Build histogram (equal 5-week bins; songs beyond 45w are not binned)
   const bucketCounts = new Map<string, number>();
   for (const w of allWeeks) {
     const b = toSpotifyBucket(w);
-    bucketCounts.set(b, (bucketCounts.get(b) || 0) + 1);
+    if (b) bucketCounts.set(b, (bucketCounts.get(b) || 0) + 1);
   }
-  const yearDistribution = SPOTIFY_BUCKET_RANGES.map((b) => ({
+  const yearDistribution: SpotifyLifespanBucket[] = SPOTIFY_BUCKET_RANGES.map((b) => ({
     bucket: b.label,
+    min: b.min,
+    max: b.max,
     count: bucketCounts.get(b.label) || 0,
   }));
 
-  // Genre average
+  // Genre stats
   const genreRows = typedRows.filter((r) => classifyGenre(r.artist_genres) === genre);
   const genreAvg = genreRows.length
     ? genreRows.reduce((s, r) => s + r.weeks_on_chart, 0) / genreRows.length
     : yearAvg;
 
+  // Genre distribution (same bins as year)
+  const genreBucketCounts = new Map<string, number>();
+  for (const r of genreRows) {
+    const b = toSpotifyBucket(r.weeks_on_chart);
+    if (b) genreBucketCounts.set(b, (genreBucketCounts.get(b) || 0) + 1);
+  }
+  const genreDistribution: SpotifyLifespanBucket[] = SPOTIFY_BUCKET_RANGES.map((b) => ({
+    bucket: b.label,
+    min: b.min,
+    max: b.max,
+    count: genreBucketCounts.get(b.label) || 0,
+  }));
+
   return {
     yearDistribution,
+    genreDistribution,
     yearAvg,
     genreAvg,
     genreLabel: genre,
@@ -637,7 +658,8 @@ export async function fetchSpotifyLifespanContext(
 
 export type LongevityCategory = "viral" | "lasting" | "slow_burn" | "flash";
 
-export const LONGEVITY_THRESHOLD = 0.35;
+export const IMPACT_THRESHOLD = 0.35; // peak ~#14 or higher → "high impact"
+export const ENDURANCE_THRESHOLD = 0.50; // ~10 weeks or more → "high endurance"
 
 export function songImpactScore(peakRank: number): number {
   // #1 → 1.00, #14 → 0.50, #50 → 0.26, #200 → 0.00
@@ -653,9 +675,9 @@ export function classifySongLongevity(summary: SongSummary): LongevityCategory {
   const impact = songImpactScore(summary.peak_rank);
   const endurance = songEnduranceScore(summary.weeks_on_chart);
 
-  if (impact >= LONGEVITY_THRESHOLD && endurance < LONGEVITY_THRESHOLD) return "viral";
-  if (impact >= LONGEVITY_THRESHOLD && endurance >= LONGEVITY_THRESHOLD) return "lasting";
-  if (impact < LONGEVITY_THRESHOLD && endurance >= LONGEVITY_THRESHOLD) return "slow_burn";
+  if (impact >= IMPACT_THRESHOLD && endurance < ENDURANCE_THRESHOLD) return "viral";
+  if (impact >= IMPACT_THRESHOLD && endurance >= ENDURANCE_THRESHOLD) return "lasting";
+  if (impact < IMPACT_THRESHOLD && endurance >= ENDURANCE_THRESHOLD) return "slow_burn";
   return "flash";
 }
 
@@ -672,3 +694,81 @@ export const LONGEVITY_LABELS: Record<LongevityCategory, string> = {
   slow_burn: "Slow Burn",
   flash: "Flash",
 };
+
+// ---------- Longevity category context for song deep dive ----------
+
+export type LongevityCategoryStats = {
+  category: string;
+  count: number;
+  avgWeeks: number;
+  avgPeakRank: number;
+};
+
+export type LongevityCategoryContext = {
+  categoryDistribution: LongevityCategoryStats[];
+  songCategory: LongevityCategory;
+  totalSongs: number;
+  sameCategoryCount: number;
+  percentileInCategory: number;
+};
+
+export async function fetchLongevityCategoryContext(
+  songWeeks: number,
+  songPeakRank: number,
+): Promise<LongevityCategoryContext> {
+  type Row = { weeks_on_chart: number; peak_rank: number };
+  const typedRows = await paginatedFetch<Row>(
+    "song_summary",
+    "weeks_on_chart, peak_rank",
+    "peak_rank",
+  );
+
+  if (!typedRows.length) {
+    return {
+      categoryDistribution: [],
+      songCategory: "flash",
+      totalSongs: 0,
+      sameCategoryCount: 0,
+      percentileInCategory: 50,
+    };
+  }
+
+  const categorized = typedRows.map((r) => {
+    const cat = classifySongLongevity({ peak_rank: r.peak_rank, weeks_on_chart: r.weeks_on_chart } as SongSummary);
+    return { ...r, category: cat };
+  });
+
+  const catGroups = new Map<string, Row[]>();
+  for (const row of categorized) {
+    const arr = catGroups.get(row.category) || [];
+    arr.push(row);
+    catGroups.set(row.category, arr);
+  }
+
+  const categoryOrder: LongevityCategory[] = ["viral", "lasting", "slow_burn", "flash"];
+  const categoryDistribution: LongevityCategoryStats[] = categoryOrder.map((cat) => {
+    const group = catGroups.get(cat) || [];
+    return {
+      category: cat,
+      count: group.length,
+      avgWeeks: group.length ? group.reduce((s, r) => s + r.weeks_on_chart, 0) / group.length : 0,
+      avgPeakRank: group.length ? group.reduce((s, r) => s + r.peak_rank, 0) / group.length : 0,
+    };
+  });
+
+  const songCategory = classifySongLongevity({ peak_rank: songPeakRank, weeks_on_chart: songWeeks } as SongSummary);
+
+  const sameCategory = categorized.filter((r) => r.category === songCategory);
+  const fewerWeeks = sameCategory.filter((r) => r.weeks_on_chart < songWeeks).length;
+  const percentileInCategory = sameCategory.length
+    ? Math.round((fewerWeeks / sameCategory.length) * 100)
+    : 50;
+
+  return {
+    categoryDistribution,
+    songCategory,
+    totalSongs: typedRows.length,
+    sameCategoryCount: sameCategory.length,
+    percentileInCategory,
+  };
+}
