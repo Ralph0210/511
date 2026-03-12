@@ -213,6 +213,9 @@ export default function ChartRiseScrolly({ data, peakRank, chartRunInfo, beat }:
       // Data group (clipped)
       const dataG = g.append("g").attr("class", "data-group").attr("clip-path", "url(#rise-clip)");
 
+      // Annotation group (unclipped — labels that may extend above chart area)
+      const annotG = g.append("g").attr("class", "annotation-group");
+
       // Line and area per run
       const areaGen = d3.area<DataPoint>()
         .x((d) => x(parseDate(d.week)!)).y0(H).y1((d) => y(d.rank)).curve(d3.curveMonotoneX);
@@ -273,7 +276,7 @@ export default function ChartRiseScrolly({ data, peakRank, chartRunInfo, beat }:
             .attr("data-week", firstPt.week).attr("data-rank", firstPt.rank);
 
           if (i === 0) {
-            dataG.append("text").attr("class", "reentry-label")
+            annotG.append("text").attr("class", "reentry-label")
               .attr("x", x2 + 10).attr("y", y(firstPt.rank) - 6)
               .attr("font-size", 13).attr("fill", "#EF4444").attr("font-weight", 600).attr("opacity", 0)
               .attr("data-week", firstPt.week).attr("data-rank", firstPt.rank)
@@ -282,8 +285,7 @@ export default function ChartRiseScrolly({ data, peakRank, chartRunInfo, beat }:
         }
       }
 
-      // Peak annotation (unclipped — extends above chart area)
-      const annotG = g.append("g").attr("class", "annotation-group");
+      // Peak annotation (in annotG — unclipped)
       const peakX = x(peakDate);
       const peakY = y(peakPoint.rank);
       annotG.append("circle").attr("class", "rise-peak-dot")
@@ -498,7 +500,7 @@ export default function ChartRiseScrolly({ data, peakRank, chartRunInfo, beat }:
           if (doTransition) el.transition("zoom").delay(100).duration(dur).ease(d3.easeCubicInOut).attr("cx", x(pd(el.attr("data-week")!)!)).attr("cy", y(parseInt(el.attr("data-rank")!)));
           else el.attr("cx", x(pd(el.attr("data-week")!)!)).attr("cy", y(parseInt(el.attr("data-rank")!)));
         });
-        dataG.selectAll<SVGTextElement, unknown>(".reentry-label").each(function () {
+        g.selectAll<SVGTextElement, unknown>(".reentry-label").each(function () {
           const el = d3.select(this);
           if (doTransition) el.transition("zoom").delay(100).duration(dur).ease(d3.easeCubicInOut).attr("x", x(pd(el.attr("data-week")!)!) + 10).attr("y", y(parseInt(el.attr("data-rank")!)) - 6);
           else el.attr("x", x(pd(el.attr("data-week")!)!) + 10).attr("y", y(parseInt(el.attr("data-rank")!)) - 6);
@@ -537,20 +539,22 @@ export default function ChartRiseScrolly({ data, peakRank, chartRunInfo, beat }:
           dataG.selectAll(".gap-connector").transition("vis").delay(500).duration(400).attr("opacity", 0.6);
           dataG.selectAll(".gap-label").transition("vis").delay(600).duration(300).attr("opacity", 0.8);
           dataG.selectAll(".reentry-dot").transition("vis").delay(700).duration(300).attr("opacity", 1);
-          dataG.selectAll(".reentry-label").transition("vis").delay(800).duration(300).attr("opacity", 1);
+          g.selectAll(".reentry-label").transition("vis").delay(800).duration(300).attr("opacity", 1);
         } else {
           dataG.selectAll(".gap-connector").attr("opacity", 0.6);
           dataG.selectAll(".gap-label").attr("opacity", 0.8);
           dataG.selectAll(".reentry-dot").attr("opacity", 1);
-          dataG.selectAll(".reentry-label").attr("opacity", 1);
+          g.selectAll(".reentry-label").attr("opacity", 1);
         }
       }
     } else {
       if (shouldAnimate && prevBeat >= 1) {
-        dataG.selectAll(".rise-area, .rise-line, .gap-connector, .gap-label, .reentry-dot, .reentry-label")
+        dataG.selectAll(".rise-area, .rise-line, .gap-connector, .gap-label, .reentry-dot")
           .transition("vis").duration(400).attr("opacity", 0);
+        g.selectAll(".reentry-label").transition("vis").duration(400).attr("opacity", 0);
       } else {
-        dataG.selectAll(".rise-area, .rise-line, .gap-connector, .gap-label, .reentry-dot, .reentry-label").attr("opacity", 0);
+        dataG.selectAll(".rise-area, .rise-line, .gap-connector, .gap-label, .reentry-dot").attr("opacity", 0);
+        g.selectAll(".reentry-label").attr("opacity", 0);
       }
     }
 

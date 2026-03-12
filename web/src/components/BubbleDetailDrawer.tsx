@@ -67,37 +67,30 @@ export default function BubbleDetailDrawer({ song, onClose }: Props) {
         </button>
 
         <div className="flex-1 overflow-y-auto p-6 pt-14">
-          {/* Album art */}
-          <div className="mx-auto h-48 w-48 overflow-hidden rounded-2xl bg-zinc-700">
-            {song.album_img ? (
-              <img
-                src={song.album_img}
-                alt={`${song.track_name} album art`}
-                className="h-full w-full object-cover"
-              />
-            ) : (
-              <div className="flex h-full w-full items-center justify-center text-4xl text-zinc-400">
-                ♫
-              </div>
-            )}
-          </div>
-
-          {/* Song info */}
-          <div className="mt-5 text-center">
-            <h3 className="text-lg font-semibold">{song.track_name}</h3>
-            <p className="mt-0.5 text-sm text-[#B3B3B3]">{song.artist_name}</p>
+          {/* Spotify embed (album art + name + artist + player) */}
+          <div className="overflow-hidden rounded-xl" style={{ height: 352 }}>
+            <iframe
+              src={`https://open.spotify.com/embed/track/${song.track_id}?theme=0`}
+              width="100%"
+              height="352"
+              allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
+              loading="lazy"
+              scrolling="no"
+              style={{ borderRadius: 12, border: 0 }}
+              title={`${song.track_name} on Spotify`}
+            />
           </div>
 
           {/* Badges */}
           <div className="mt-4 flex flex-wrap justify-center gap-2">
             <span
-              className="rounded-full px-3 py-1 text-xs font-medium text-white"
+              className="inline-flex items-center rounded-full px-3 py-1 text-xs font-medium leading-none text-white"
               style={{ backgroundColor: genreColor }}
             >
               {song.genre}
             </span>
             <span
-              className="rounded-full border px-3 py-1 text-xs font-medium"
+              className="inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium leading-none"
               style={{
                 borderColor: longevityColor + "60",
                 color: longevityColor,
