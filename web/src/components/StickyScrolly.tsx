@@ -49,11 +49,12 @@ export default function StickyScrolly({ beats, onBeatChange, children, className
         ([entry]) => {
           if (entry.isIntersecting) {
             setActiveIndex(i);
-            onBeatChange(i + 1);
+          } else if (!entry.isIntersecting && entry.boundingClientRect.top > 0) {
+            setActiveIndex((prev) => (prev === i ? i - 1 : prev));
           }
         },
         {
-          rootMargin: "-35% 0px -35% 0px",
+          rootMargin: "-15% 0px -55% 0px",
           threshold: 0.1,
         }
       );
@@ -62,14 +63,12 @@ export default function StickyScrolly({ beats, onBeatChange, children, className
     });
 
     return () => observers.forEach((o) => o.disconnect());
-  }, [scrollBeats.length, onBeatChange]);
+  }, [scrollBeats.length]);
 
-  // Fire beat 0 on mount
+  // Single source of truth: derive beat from activeIndex
   useEffect(() => {
-    if (beats.length > 0) {
-      onBeatChange(0);
-    }
-  }, [beats.length, onBeatChange]);
+    onBeatChange(activeIndex + 1);
+  }, [activeIndex, onBeatChange]);
 
   return (
     <div ref={containerRef} className={`relative ${className || ""}`}>
@@ -100,8 +99,8 @@ export default function StickyScrolly({ beats, onBeatChange, children, className
             <div
               key={beat.id}
               ref={(el) => { beatRefs.current[i] = el; }}
-              className={`mx-auto mb-[45vh] max-w-6xl px-6 transition-opacity duration-500 ${
-                i <= activeIndex ? "opacity-100" : "opacity-20"
+              className={`mx-auto mb-[45vh] max-w-6xl px-6 transition-opacity duration-700 ${
+                i <= activeIndex ? "opacity-100" : "opacity-[0.08]"
               }`}
             >
               <div className="max-w-[70%] text-lg font-bold leading-snug text-white sm:text-xl md:text-2xl">

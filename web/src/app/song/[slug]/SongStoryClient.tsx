@@ -3,6 +3,7 @@
 import { useState, useCallback } from "react";
 import Link from "next/link";
 import StickyScrolly, { type ScrollBeat } from "@/components/StickyScrolly";
+import SplitScrolly from "@/components/SplitScrolly";
 import ChartRiseScrolly from "@/components/ChartRiseScrolly";
 import ChartSoundScrolly from "@/components/ChartSoundScrolly";
 import ChartMomentScrolly from "@/components/ChartMomentScrolly";
@@ -131,14 +132,14 @@ export default function SongStoryClient({ trackName, chapters, outro, songData, 
           <ChapterHeader chapter={chapters.sound} index={1} total={totalChapters} />
         </div>
         {songData ? (
-          <StickyScrolly beats={soundBeats} onBeatChange={handleSoundBeat}>
+          <SplitScrolly beats={soundBeats} onBeatChange={handleSoundBeat}>
             <ChartSoundScrolly
               songFeatures={songData.songFeatures}
               eraAverage={songData.eraAverage}
               songName={trackName}
               beat={soundBeat}
             />
-          </StickyScrolly>
+          </SplitScrolly>
         ) : (
           <div className="flex h-64 items-center justify-center rounded-2xl border border-dashed border-zinc-700 text-sm text-muted">
             Audio feature data unavailable

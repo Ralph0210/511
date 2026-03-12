@@ -189,6 +189,15 @@ function compareWord(val: number, avg: number): string {
   return pct > 0.25 ? "well below" : "below";
 }
 
+const FEATURE_DEFINITIONS: Record<string, string> = {
+  danceability: "how suitable a track is for dancing, based on tempo, rhythm stability, and beat strength",
+  energy: "the intensity and activity level — loud, fast, noisy tracks score high",
+  valence: "the musical positivity — high valence sounds happy and cheerful, low valence sounds sad or angry",
+  acousticness: "how acoustic (vs. electronic) the track sounds",
+  speechiness: "how much spoken word (vs. singing) is in the track — think rap, poetry, or talk shows",
+  tempo: "the speed of the track in beats per minute",
+};
+
 function featureDescriptor(feature: string, value: number): string {
   const descriptors: Record<string, [string, string]> = {
     danceability: ["groove-driven and rhythmically infectious", "less dance-oriented"],
@@ -277,20 +286,21 @@ function buildSoundNarrative(stats: SongStats): SongStoryChapter {
 
   const beat0 = `Its chart trajectory shows how it performed. Now let\u2019s hear what it sounded like \u2014 and how it compared to everything else on the chart in ${year}.`;
 
-  const beat1 = `The gray shape shows the average audio profile of ${year}\u2019s Spotify Top 200 \u2014 the sonic baseline across six dimensions. This is what a "typical" charting song sounded like that year.`;
+  const beat1 = `The gray shape shows the average audio profile of ${year}\u2019s Spotify Top 200. Each axis measures a different quality: danceability (${FEATURE_DEFINITIONS.danceability}), energy (${FEATURE_DEFINITIONS.energy}), valence (${FEATURE_DEFINITIONS.valence}), and more. This is what a "typical" charting song sounded like that year.`;
 
-  const beat2 = `Now here\u2019s "${trackName}" in green. It\u2019s ${character}. Notice where the green shape extends beyond or shrinks inside the gray \u2014 those are the dimensions where this song stands apart.`;
+  const beat2 = `Now here\u2019s "${trackName}" in green. It\u2019s ${character}. Where the green shape extends beyond the gray, the song scores higher than average; where it shrinks inside, it scores lower.`;
 
   const top2 = deltas.slice(0, 2);
   const featureDescs = top2.map((t) => {
     const cmp = compareWord(t.value, t.avg);
-    return `${t.feature} (${t.value.toFixed(2)}) is ${cmp} the chart average of ${t.avg.toFixed(2)}, making it ${featureDescriptor(t.feature, t.value)}`;
+    const def = FEATURE_DEFINITIONS[t.feature] || t.feature;
+    return `${t.feature} \u2014 ${def} \u2014 is ${cmp} the chart average (${(t.value * 100).toFixed(0)}% vs ${(t.avg * 100).toFixed(0)}%), making it ${featureDescriptor(t.feature, t.value)}`;
   });
-  const beat3 = `The standout traits: ${featureDescs.join("; and ")}. ${deltas[0].delta > 0.2 ? "This song occupies a distinctly different sonic space than most of its chart neighbors." : "Subtle differences that add up to a unique listening experience."} Now let\u2019s see who it was competing against.`;
+  const beat3 = `The biggest differences: ${featureDescs.join(". Also, its ")}. ${deltas[0].delta > 0.2 ? "This song occupies a distinctly different sonic space than most of its chart neighbors." : "Subtle differences that add up to a unique listening experience."}`;
 
   const featureLines = deltas.slice(0, 3).map((t) => {
     const cmp = compareWord(t.value, t.avg);
-    return `Its ${t.feature} (${t.value.toFixed(2)}) sits ${cmp} the ${year} chart average of ${t.avg.toFixed(2)} \u2014 making it ${featureDescriptor(t.feature, t.value)}.`;
+    return `Its ${t.feature} (${(t.value * 100).toFixed(0)}%) sits ${cmp} the ${year} chart average of ${(t.avg * 100).toFixed(0)}% \u2014 making it ${featureDescriptor(t.feature, t.value)}.`;
   });
   const narrative = `"${trackName}" is ${character}. How does it compare to what else was charting? ${featureLines.join(" ")}`;
 
