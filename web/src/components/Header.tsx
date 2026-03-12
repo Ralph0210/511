@@ -21,12 +21,10 @@ export default function Header() {
       <div className="mx-auto flex max-w-page items-center justify-between px-6 py-4">
         {/* Logo */}
         <Link href="/" className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-sm font-bold text-black">
-            511
-          </div>
+          <img src="/icon.svg" alt="ChartPulse" className="h-8 w-8 rounded-lg" />
           {!overlayContent && (
             <span className="text-lg font-semibold tracking-tight text-white">
-              Team 3
+              511 Team 3
             </span>
           )}
         </Link>
