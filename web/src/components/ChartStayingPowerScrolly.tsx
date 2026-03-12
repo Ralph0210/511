@@ -73,7 +73,7 @@ export default function ChartStayingPowerScrolly({
 
       const container = svgRef.current.parentElement!;
       const width = container.clientWidth;
-      const height = 400;
+      const height = 500;
       svg.attr("width", width).attr("height", height);
 
       const margin = { top: 24, right: 40, bottom: 58, left: 60 };
@@ -358,18 +358,10 @@ export default function ChartStayingPowerScrolly({
   }, [spotifyDistribution, billboardDistribution]);
 
   const hasBillboard = billboardDistribution && billboardDistribution.length > 0;
-  const isBillboardBeat = beat >= 3 && hasBillboard;
 
   return (
-    <div className={`rounded-2xl border p-4 ${isBillboardBeat ? "border-amber-800/40 bg-surface" : "border-zinc-800 bg-surface"}`}>
+    <div>
       <svg ref={svgRef} className="w-full" role="img" aria-label={`Histogram showing song lifespan of ${songWeeks} weeks compared to distribution`} />
-      <p className="mt-2 text-center text-xs text-muted">
-        {isBillboardBeat ? (
-          <span className="text-amber-400">Billboard Hot 100 · All songs since 1958</span>
-        ) : (
-          <span>Spotify Global Top 200 · {spotifyDistribution.length > 0 ? "Songs from same debut year" : "Lifespan distribution"}</span>
-        )}
-      </p>
     </div>
   );
 }

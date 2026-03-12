@@ -9,7 +9,7 @@ import ChartMomentScrolly from "@/components/ChartMomentScrolly";
 import ChartStayingPowerScrolly from "@/components/ChartStayingPowerScrolly";
 import type { SongStoryChapter } from "@/data/featured-songs";
 import type { SongPageData } from "./page";
-import type { SongClassification, PeerSong } from "@/lib/narrative-generator";
+import type { PeerSong } from "@/lib/narrative-generator";
 
 type Props = {
   trackName: string;
@@ -23,7 +23,6 @@ type Props = {
   outro: string;
   songData: SongPageData | null;
   genre: string;
-  classification: { label: string; classification: SongClassification };
 };
 
 const CHAPTER_TITLES = ["The Rise", "The Sound", "The Moment", "The Staying Power"];
@@ -84,16 +83,7 @@ function ChapterHeader({ chapter, index, total }: { chapter: SongStoryChapter; i
   );
 }
 
-const CLASSIFICATION_COLORS: Record<SongClassification, string> = {
-  "viral-spike": "#EF4444",
-  "slow-burn": "#3B82F6",
-  "steady-performer": "#1DB954",
-  "genre-disruptor": "#8B5CF6",
-  "comeback-king": "#F59E0B",
-  "chart-topper": "#EC4899",
-};
-
-export default function SongStoryClient({ trackName, chapters, outro, songData, genre, classification }: Props) {
+export default function SongStoryClient({ trackName, chapters, outro, songData, genre }: Props) {
   const [riseBeat, setRiseBeat] = useState(-1);
   const [soundBeat, setSoundBeat] = useState(-1);
   const [momentBeat, setMomentBeat] = useState(-1);
@@ -113,10 +103,12 @@ export default function SongStoryClient({ trackName, chapters, outro, songData, 
   const totalChapters = stayingPowerChapter ? 4 : 3;
 
   return (
-    <div className="mx-auto max-w-6xl px-6 py-16 space-y-32">
+    <div className="py-16 space-y-32">
       {/* Chapter 1: The Rise */}
       <section>
-        <ChapterHeader chapter={chapters.rise} index={0} total={totalChapters} />
+        <div className="mx-auto max-w-6xl px-6">
+          <ChapterHeader chapter={chapters.rise} index={0} total={totalChapters} />
+        </div>
         {songData && songData.trajectory.length > 0 ? (
           <StickyScrolly beats={riseBeats} onBeatChange={handleRiseBeat}>
             <ChartRiseScrolly
@@ -135,7 +127,9 @@ export default function SongStoryClient({ trackName, chapters, outro, songData, 
 
       {/* Chapter 2: The Sound */}
       <section>
-        <ChapterHeader chapter={chapters.sound} index={1} total={totalChapters} />
+        <div className="mx-auto max-w-6xl px-6">
+          <ChapterHeader chapter={chapters.sound} index={1} total={totalChapters} />
+        </div>
         {songData ? (
           <StickyScrolly beats={soundBeats} onBeatChange={handleSoundBeat}>
             <ChartSoundScrolly
@@ -154,7 +148,9 @@ export default function SongStoryClient({ trackName, chapters, outro, songData, 
 
       {/* Chapter 3: The Moment */}
       <section>
-        <ChapterHeader chapter={chapters.moment} index={2} total={totalChapters} />
+        <div className="mx-auto max-w-6xl px-6">
+          <ChapterHeader chapter={chapters.moment} index={2} total={totalChapters} />
+        </div>
         {songData ? (
           <StickyScrolly beats={momentBeats} onBeatChange={handleMomentBeat}>
             <ChartMomentScrolly
@@ -180,7 +176,9 @@ export default function SongStoryClient({ trackName, chapters, outro, songData, 
       {/* Chapter 4: The Staying Power */}
       {stayingPowerChapter && songData && songData.spotifyLifespan && (
         <section>
-          <ChapterHeader chapter={stayingPowerChapter} index={3} total={totalChapters} />
+          <div className="mx-auto max-w-6xl px-6">
+            <ChapterHeader chapter={stayingPowerChapter} index={3} total={totalChapters} />
+          </div>
           <StickyScrolly beats={stayingBeats} onBeatChange={handleStayingBeat}>
             <ChartStayingPowerScrolly
               spotifyDistribution={songData.spotifyLifespan.yearDistribution}
@@ -199,29 +197,10 @@ export default function SongStoryClient({ trackName, chapters, outro, songData, 
       )}
 
       {/* Conclusion: The Verdict */}
-      <section className="mx-auto max-w-4xl">
+      <section className="mx-auto max-w-4xl px-6">
         <div className="mb-6">
           <p className="text-xs font-semibold uppercase tracking-wider text-accent">Conclusion</p>
           <h2 className="mt-1 text-2xl font-bold">The Verdict</h2>
-        </div>
-
-        {/* Classification badge */}
-        <div className="mb-8 flex items-center gap-4">
-          <div
-            className="rounded-xl border px-5 py-3 text-center"
-            style={{
-              borderColor: CLASSIFICATION_COLORS[classification.classification] + "40",
-              backgroundColor: CLASSIFICATION_COLORS[classification.classification] + "10",
-            }}
-          >
-            <p className="text-xs font-medium uppercase tracking-wider text-muted">Classification</p>
-            <p
-              className="mt-0.5 text-lg font-bold"
-              style={{ color: CLASSIFICATION_COLORS[classification.classification] }}
-            >
-              {classification.label}
-            </p>
-          </div>
         </div>
 
         {/* Key stats grid */}

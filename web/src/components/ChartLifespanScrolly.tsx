@@ -43,7 +43,7 @@ export default function ChartLifespanScrolly({ data, beat }: Props) {
 
       const container = svgRef.current.parentElement!;
       const width = container.clientWidth;
-      const height = 380;
+      const height = 500;
       svg.attr("width", width).attr("height", height);
 
       const margin = { top: 20, right: 30, bottom: 50, left: 55 };
@@ -337,11 +337,8 @@ export default function ChartLifespanScrolly({ data, beat }: Props) {
   }, [data]);
 
   return (
-    <div className="rounded-2xl border border-amber-800/40 bg-surface p-4">
+    <div>
       <svg ref={svgRef} className="w-full" role="img" aria-label="Chart showing average song lifespan on Billboard Hot 100 over time" />
-      <p className="mt-2 text-center text-xs text-amber-400">
-        Billboard Hot 100 · Radio + sales + streaming · US chart · Since 1958
-      </p>
     </div>
   );
 }

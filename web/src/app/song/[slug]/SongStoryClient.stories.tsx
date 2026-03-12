@@ -2,7 +2,6 @@ import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import SongStoryClient from "./SongStoryClient";
 import type { SongStoryChapter } from "@/data/featured-songs";
 import type { SongPageData } from "./page";
-import type { SongClassification } from "@/lib/narrative-generator";
 import {
   MOCK_RISE_DATA,
   MOCK_CHART_RUN_INFO,
@@ -115,11 +114,6 @@ const MOCK_SONG_DATA: SongPageData = {
   songPeakStreams: 9_800_000,
 };
 
-const MOCK_CLASSIFICATION: { label: string; classification: SongClassification } = {
-  label: "Steady Performer",
-  classification: "steady-performer",
-};
-
 const baseArgs = {
   trackName: "Blinding Lights",
   chapters: MOCK_CHAPTERS,
@@ -127,7 +121,6 @@ const baseArgs = {
     "Blinding Lights is a statistical anomaly — a song that combined viral momentum with genuine staying power. Its 42-week chart run, peak at #3, and sonic uniqueness make it one of the defining hits of 2023.",
   songData: MOCK_SONG_DATA,
   genre: "Pop",
-  classification: MOCK_CLASSIFICATION,
 };
 
 export const Default: Story = {
@@ -159,12 +152,6 @@ export const NoBillboard: Story = {
   },
 };
 
-export const ViralSpike: Story = {
-  args: {
-    ...baseArgs,
-    classification: { label: "Viral Spike", classification: "viral-spike" as SongClassification },
-  },
-};
 
 export const NoData: Story = {
   args: {

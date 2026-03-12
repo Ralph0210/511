@@ -5,7 +5,7 @@ export default function Footer() {
     <footer className="border-t border-zinc-800">
       <div className="mx-auto flex max-w-page items-center justify-between px-6 py-6">
         <p className="text-xs text-zinc-500">
-          ChartPulse &middot; Spotify Top 200 data, 2017&ndash;2021
+          Team 3 &middot; Spotify Top 200 data, 2017&ndash;2021
         </p>
         <div className="flex gap-4">
           <Link

@@ -260,7 +260,6 @@ export default async function SongPage({ params }: { params: Promise<{ slug: str
   const albumImg = songData.albumImg || "";
 
   const thesis = "thesis" in narrative ? narrative.thesis : generated.thesis;
-  const classification = "classification" in narrative ? narrative.classification : generated.classification;
 
   return (
     <div>
@@ -268,24 +267,23 @@ export default async function SongPage({ params }: { params: Promise<{ slug: str
       <div className="relative overflow-hidden bg-zinc-900 text-white">
         <div className="absolute inset-0 scale-110 opacity-30 blur-3xl" style={{ backgroundImage: albumImg ? `url(${albumImg})` : undefined, backgroundSize: "cover", backgroundPosition: "center" }} />
         <div className="relative mx-auto max-w-page px-6 py-20">
-          <Link href="/" className="mb-8 inline-flex items-center gap-1 text-sm text-zinc-400 hover:text-white">
+          <Link href="/" className="mb-5 inline-flex items-center gap-1 text-sm text-zinc-400 hover:text-white">
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
             Back to Home
           </Link>
 
-          <div className="flex flex-col items-start gap-8 sm:flex-row sm:items-end">
-            {albumImg && <img src={albumImg} alt={`${trackName} album art`} className="h-48 w-48 rounded-2xl shadow-2xl" />}
-            <div className="flex-1">
+          <div className="flex flex-col gap-8 sm:flex-row sm:items-start">
+            {albumImg && <img src={albumImg} alt={`${trackName} album art`} className="h-48 w-48 flex-shrink-0 rounded-2xl shadow-2xl sm:h-56 sm:w-56" />}
+            <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
                 <p className="text-sm font-medium uppercase tracking-wider text-zinc-400">Song Story</p>
                 {isEditorial && (
                   <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-amber-400">Curated</span>
                 )}
-                <span className="rounded-full border border-accent/30 bg-accent/10 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-accent">{classification.label}</span>
               </div>
               <h1 className="mt-2 text-4xl font-bold">{trackName}</h1>
               <p className="mt-1 text-xl text-zinc-300">{artistName}</p>
-              <p className="mt-3 max-w-xl text-base italic text-zinc-400">{thesis}</p>
+              <p className="mt-3 max-w-xl text-base italic text-zinc-300">{thesis}</p>
               <div className="mt-4 flex flex-wrap gap-3">
                 <span className="rounded-full px-3 py-1 text-xs font-medium" style={{ backgroundColor: GENRE_COLORS[genre] || "#9CA3AF", color: "white" }}>{genre}</span>
                 <span className="rounded-full bg-white/10 px-3 py-1 text-xs">Peak #{songData.peakRank}</span>
@@ -305,7 +303,6 @@ export default async function SongPage({ params }: { params: Promise<{ slug: str
         outro={narrative.outro}
         songData={songData}
         genre={genre}
-        classification={classification}
       />
     </div>
   );

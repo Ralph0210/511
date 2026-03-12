@@ -55,7 +55,7 @@ export default function ChartSoundScrolly({ songFeatures, eraAverage, songName, 
       drawnRef.current = true;
       svg.selectAll("*").remove();
 
-      const size = Math.min(svgRef.current.parentElement!.clientWidth, 480);
+      const size = Math.min(svgRef.current.parentElement!.clientWidth, 540);
       svg.attr("width", size).attr("height", size);
 
       const cx = size / 2;
@@ -262,22 +262,10 @@ export default function ChartSoundScrolly({ songFeatures, eraAverage, songName, 
   }, [songFeatures, eraAverage]);
 
   return (
-    <div className="rounded-2xl border border-zinc-800 bg-surface p-4">
+    <div>
       <div className="flex justify-center">
         <svg ref={svgRef} role="img" aria-label={`Radar chart comparing ${songName} audio features against era average`} />
       </div>
-      {beat >= 2 && (
-        <div className="mt-4 flex justify-center gap-6 text-xs text-muted">
-          <span className="flex items-center gap-1.5">
-            <span className="h-3 w-3 rounded-full bg-accent" />
-            {songName}
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="h-3 w-3 rounded-full bg-zinc-400" />
-            Era Average
-          </span>
-        </div>
-      )}
     </div>
   );
 }
