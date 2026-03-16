@@ -3,13 +3,12 @@
 import { useState, useCallback } from "react";
 import Link from "next/link";
 import StickyScrolly, { type ScrollBeat } from "@/components/StickyScrolly";
+import SplitScrolly from "@/components/SplitScrolly";
 import ChartRiseScrolly from "@/components/ChartRiseScrolly";
 import ChartSoundScrolly from "@/components/ChartSoundScrolly";
-import ChartMomentScrolly from "@/components/ChartMomentScrolly";
 import ChartStayingPowerScrolly from "@/components/ChartStayingPowerScrolly";
 import type { SongStoryChapter } from "@/data/featured-songs";
 import type { SongPageData } from "./page";
-import type { SongClassification, PeerSong } from "@/lib/narrative-generator";
 
 type Props = {
   trackName: string;
@@ -23,16 +22,13 @@ type Props = {
   outro: string;
   songData: SongPageData | null;
   genre: string;
-  classification: { label: string; classification: SongClassification };
 };
-
-const CHAPTER_TITLES = ["The Rise", "The Sound", "The Moment", "The Staying Power"];
 
 function chapterBeats(chapter: SongStoryChapter): ScrollBeat[] {
   if (chapter.beats?.length) {
     return chapter.beats.map((text, i) => ({
       id: `${chapter.title}-${i}`,
-      text: <p className="leading-relaxed text-muted">{text}</p>,
+      text: <p className="leading-relaxed">{text}</p>,
     }));
   }
   const sentences = chapter.narrative.match(/[^.!?]+[.!?]+/g) || [chapter.narrative];
@@ -84,39 +80,29 @@ function ChapterHeader({ chapter, index, total }: { chapter: SongStoryChapter; i
   );
 }
 
-const CLASSIFICATION_COLORS: Record<SongClassification, string> = {
-  "viral-spike": "#EF4444",
-  "slow-burn": "#3B82F6",
-  "steady-performer": "#1DB954",
-  "genre-disruptor": "#8B5CF6",
-  "comeback-king": "#F59E0B",
-  "chart-topper": "#EC4899",
-};
-
-export default function SongStoryClient({ trackName, chapters, outro, songData, genre, classification }: Props) {
+export default function SongStoryClient({ trackName, chapters, outro, songData, genre }: Props) {
   const [riseBeat, setRiseBeat] = useState(-1);
   const [soundBeat, setSoundBeat] = useState(-1);
-  const [momentBeat, setMomentBeat] = useState(-1);
   const [stayingBeat, setStayingBeat] = useState(-1);
 
   const handleRiseBeat = useCallback((i: number) => setRiseBeat(i), []);
   const handleSoundBeat = useCallback((i: number) => setSoundBeat(i), []);
-  const handleMomentBeat = useCallback((i: number) => setMomentBeat(i), []);
   const handleStayingBeat = useCallback((i: number) => setStayingBeat(i), []);
 
   const riseBeats = chapterBeats(chapters.rise);
   const soundBeats = chapterBeats(chapters.sound);
-  const momentBeats = chapterBeats(chapters.moment);
   const stayingPowerChapter = chapters.stayingPower;
   const stayingBeats = stayingPowerChapter ? chapterBeats(stayingPowerChapter) : [];
 
-  const totalChapters = stayingPowerChapter ? 4 : 3;
+  const totalChapters = stayingPowerChapter ? 3 : 2;
 
   return (
-    <div className="mx-auto max-w-6xl px-6 py-16 space-y-32">
+    <div className="py-16 space-y-32">
       {/* Chapter 1: The Rise */}
       <section>
-        <ChapterHeader chapter={chapters.rise} index={0} total={totalChapters} />
+        <div className="mx-auto max-w-6xl px-6">
+          <ChapterHeader chapter={chapters.rise} index={0} total={totalChapters} />
+        </div>
         {songData && songData.trajectory.length > 0 ? (
           <StickyScrolly beats={riseBeats} onBeatChange={handleRiseBeat}>
             <ChartRiseScrolly
@@ -135,16 +121,18 @@ export default function SongStoryClient({ trackName, chapters, outro, songData, 
 
       {/* Chapter 2: The Sound */}
       <section>
-        <ChapterHeader chapter={chapters.sound} index={1} total={totalChapters} />
+        <div className="mx-auto max-w-6xl px-6">
+          <ChapterHeader chapter={chapters.sound} index={1} total={totalChapters} />
+        </div>
         {songData ? (
-          <StickyScrolly beats={soundBeats} onBeatChange={handleSoundBeat}>
+          <SplitScrolly beats={soundBeats} onBeatChange={handleSoundBeat}>
             <ChartSoundScrolly
               songFeatures={songData.songFeatures}
               eraAverage={songData.eraAverage}
               songName={trackName}
               beat={soundBeat}
             />
-          </StickyScrolly>
+          </SplitScrolly>
         ) : (
           <div className="flex h-64 items-center justify-center rounded-2xl border border-dashed border-zinc-700 text-sm text-muted">
             Audio feature data unavailable
@@ -152,43 +140,26 @@ export default function SongStoryClient({ trackName, chapters, outro, songData, 
         )}
       </section>
 
-      {/* Chapter 3: The Moment */}
-      <section>
-        <ChapterHeader chapter={chapters.moment} index={2} total={totalChapters} />
-        {songData ? (
-          <StickyScrolly beats={momentBeats} onBeatChange={handleMomentBeat}>
-            <ChartMomentScrolly
-              peerSongs={songData.peerSongs}
-              songTrackName={trackName}
-              songPeakRank={songData.peakRank}
-              songPeakStreams={songData.songPeakStreams}
-              totalChartStreams={songData.totalChartStreams}
-              genreShares={songData.genreShares}
-              highlightGenre={genre}
-              songFirstWeek={songData.firstWeek}
-              songLastWeek={songData.lastWeek}
-              beat={momentBeat}
-            />
-          </StickyScrolly>
-        ) : (
-          <div className="flex h-64 items-center justify-center rounded-2xl border border-dashed border-zinc-700 text-sm text-muted">
-            Context data unavailable
-          </div>
-        )}
-      </section>
-
-      {/* Chapter 4: The Staying Power */}
+      {/* Chapter 3: The Staying Power */}
       {stayingPowerChapter && songData && songData.spotifyLifespan && (
         <section>
-          <ChapterHeader chapter={stayingPowerChapter} index={3} total={totalChapters} />
+          <div className="mx-auto max-w-6xl px-6">
+            <ChapterHeader chapter={stayingPowerChapter} index={2} total={totalChapters} />
+          </div>
           <StickyScrolly beats={stayingBeats} onBeatChange={handleStayingBeat}>
             <ChartStayingPowerScrolly
               spotifyDistribution={songData.spotifyLifespan.yearDistribution}
+              genreDistribution={songData.spotifyLifespan.genreDistribution}
               songWeeks={songData.weeksOnChart}
               yearAvg={songData.spotifyLifespan.yearAvg}
               genreAvg={songData.spotifyLifespan.genreAvg}
               genreLabel={songData.spotifyLifespan.genreLabel}
               percentileInYear={songData.spotifyLifespan.percentileInYear}
+              categoryDistribution={songData.longevityCategory?.categoryDistribution}
+              songCategory={songData.longevityCategory?.songCategory}
+              sameCategoryCount={songData.longevityCategory?.sameCategoryCount}
+              percentileInCategory={songData.longevityCategory?.percentileInCategory}
+              totalSongs={songData.longevityCategory?.totalSongs}
               billboardDistribution={songData.billboardData?.longevityDistribution}
               billboardWeeks={songData.billboardData?.totalWeeks}
               billboardPercentile={songData.billboardData?.longevityPercentile}
@@ -199,29 +170,10 @@ export default function SongStoryClient({ trackName, chapters, outro, songData, 
       )}
 
       {/* Conclusion: The Verdict */}
-      <section className="mx-auto max-w-4xl">
+      <section className="mx-auto max-w-4xl px-6">
         <div className="mb-6">
           <p className="text-xs font-semibold uppercase tracking-wider text-accent">Conclusion</p>
           <h2 className="mt-1 text-2xl font-bold">The Verdict</h2>
-        </div>
-
-        {/* Classification badge */}
-        <div className="mb-8 flex items-center gap-4">
-          <div
-            className="rounded-xl border px-5 py-3 text-center"
-            style={{
-              borderColor: CLASSIFICATION_COLORS[classification.classification] + "40",
-              backgroundColor: CLASSIFICATION_COLORS[classification.classification] + "10",
-            }}
-          >
-            <p className="text-xs font-medium uppercase tracking-wider text-muted">Classification</p>
-            <p
-              className="mt-0.5 text-lg font-bold"
-              style={{ color: CLASSIFICATION_COLORS[classification.classification] }}
-            >
-              {classification.label}
-            </p>
-          </div>
         </div>
 
         {/* Key stats grid */}
@@ -258,7 +210,7 @@ export default function SongStoryClient({ trackName, chapters, outro, songData, 
                 Anatomy of a Song
               </Link>
               <Link href="/explore/genre-pulse" className="rounded-lg bg-surface-hover px-4 py-2 text-sm transition-colors hover:bg-zinc-700">
-                Genre Pulse
+                Genre Breakdown
               </Link>
             </div>
           </div>

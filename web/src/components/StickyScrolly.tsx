@@ -17,14 +17,28 @@ type Props = {
 };
 
 /**
- * Scrollytelling layout: sticky visualization on the left/top,
- * text panels scroll on the right/bottom. As each text panel enters
- * the viewport center, it becomes "active" and triggers onBeatChange.
+ * Scrollytelling layout: first beat static below chapter title,
+ * chart directly below it, sticks when scrolling, text scrolls over.
  */
 export default function StickyScrolly({ beats, onBeatChange, children, className }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const chartRef = useRef<HTMLDivElement>(null);
   const beatRefs = useRef<(HTMLDivElement | null)[]>([]);
   const [activeIndex, setActiveIndex] = useState(-1);
+  const [chartTop, setChartTop] = useState<number | null>(null);
+
+  const scrollBeats = beats.slice(1);
+
+  // Measure where the chart naturally sits so we can pin it there
+  useEffect(() => {
+    if (!chartRef.current) return;
+    const rect = chartRef.current.getBoundingClientRect();
+    const scrollY = window.scrollY;
+    // Calculate the top offset that pins the chart to the bottom of viewport
+    const viewportBottom = window.innerHeight;
+    const chartHeight = rect.height;
+    setChartTop(viewportBottom - chartHeight - 24); // 24px = pb-6
+  }, [children]);
 
   useEffect(() => {
     const observers: IntersectionObserver[] = [];
@@ -35,12 +49,12 @@ export default function StickyScrolly({ beats, onBeatChange, children, className
         ([entry]) => {
           if (entry.isIntersecting) {
             setActiveIndex(i);
-            onBeatChange(i);
+          } else if (!entry.isIntersecting && entry.boundingClientRect.top > 0) {
+            setActiveIndex((prev) => (prev === i ? i - 1 : prev));
           }
         },
         {
-          // Trigger when the beat is near the vertical center of the viewport
-          rootMargin: "-40% 0px -40% 0px",
+          rootMargin: "-15% 0px -55% 0px",
           threshold: 0.1,
         }
       );
@@ -49,42 +63,57 @@ export default function StickyScrolly({ beats, onBeatChange, children, className
     });
 
     return () => observers.forEach((o) => o.disconnect());
-  }, [beats.length, onBeatChange]);
+  }, [scrollBeats.length]);
+
+  // Single source of truth: derive beat from activeIndex
+  useEffect(() => {
+    onBeatChange(activeIndex + 1);
+  }, [activeIndex, onBeatChange]);
 
   return (
     <div ref={containerRef} className={`relative ${className || ""}`}>
-      {/* Desktop: side-by-side. Mobile: stacked (chart on top, text below) */}
-      <div className="lg:grid lg:grid-cols-12 lg:gap-8">
-        {/* Sticky chart */}
-        <div className="lg:col-span-7">
-          <div className="lg:sticky lg:top-24">
-            {children}
+      {/* Beat 0: static, directly below chapter title */}
+      {beats.length > 0 && (
+        <div className="mx-auto max-w-6xl px-6 mb-6">
+          <div className="max-w-[70%] text-lg font-bold leading-snug text-muted sm:text-xl md:text-2xl">
+            {beats[0].text}
           </div>
         </div>
+      )}
 
-        {/* Scrolling text beats */}
-        <div className="mt-8 lg:col-span-5 lg:mt-0">
-          {/* Top spacer so first beat can reach center */}
-          <div className="h-[30vh]" />
+      {/* Chart: sticks to bottom of viewport */}
+      <div
+        ref={chartRef}
+        className="sticky z-10 w-full px-6"
+        style={{ top: chartTop != null ? `${chartTop}px` : "auto" }}
+      >
+        {children}
+      </div>
 
-          {beats.map((beat, i) => (
+      {/* Remaining beats scroll over the chart */}
+      {scrollBeats.length > 0 && (
+        <div className="relative z-20">
+          <div className="h-[40vh]" />
+
+          {scrollBeats.map((beat, i) => (
             <div
               key={beat.id}
               ref={(el) => { beatRefs.current[i] = el; }}
-              className={`mb-[40vh] transition-opacity duration-500 ${
-                activeIndex === i ? "opacity-100" : "opacity-30"
+              className={`mx-auto mb-[60vh] max-w-6xl px-6 transition-opacity duration-700 ${
+                i <= activeIndex ? "opacity-100" : "opacity-[0.05]"
               }`}
             >
-              <div className="rounded-xl bg-surface/90 p-6 shadow-sm backdrop-blur-sm">
+              <div className={`max-w-[70%] text-lg font-bold leading-snug sm:text-xl md:text-2xl ${
+                i <= activeIndex ? "text-muted" : "text-white"
+              }`}>
                 {beat.text}
               </div>
             </div>
           ))}
 
-          {/* Bottom spacer so last beat can reach center */}
-          <div className="h-[40vh]" />
+          <div className="h-[60vh]" />
         </div>
-      </div>
+      )}
     </div>
   );
 }

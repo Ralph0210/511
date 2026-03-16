@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import * as d3 from "d3";
+import { GENRE_COLORS } from "@/lib/spotify-data";
 
 /**
  * Bubble chart: how genres perform on Spotify
@@ -19,17 +20,6 @@ export type BubbleDataPoint = {
   avgStreams: number;
   avgDuration: number; // ms
   count: number;
-};
-
-const GENRE_COLORS: Record<string, string> = {
-  "Pop":         "#f97316",
-  "Hip Hop/Rap": "#8b5cf6",
-  "Latin":       "#ef4444",
-  "R&B":         "#06b6d4",
-  "Rock":        "#22c55e",
-  "EDM/Dance":   "#ec4899",
-  "Country":     "#eab308",
-  "Other":       "#94a3b8",
 };
 
 export default function ChartGenreBubble({ data }: { data: BubbleDataPoint[] }) {

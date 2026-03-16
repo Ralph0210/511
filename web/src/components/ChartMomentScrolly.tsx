@@ -57,7 +57,7 @@ export default function ChartMomentScrolly({
 
       const container = svgRef.current.parentElement!;
       const width = container.clientWidth;
-      const height = 400;
+      const height = 500;
       svg.attr("width", width).attr("height", height)
         .attr("viewBox", `0 0 ${width} ${height}`)
         .attr("preserveAspectRatio", "xMidYMid meet");
@@ -484,23 +484,10 @@ export default function ChartMomentScrolly({
     prevBeatRef.current = -2;
   }, [peerSongs, genreShares, highlightGenre]);
 
-  const isGenreBeat = beat >= 2;
 
   return (
-    <div className="rounded-2xl border border-zinc-800 bg-surface p-4">
+    <div>
       <svg ref={svgRef} className="w-full" role="img" aria-label={`Chart showing peer comparison and genre landscape for ${songTrackName}`} />
-      <p className="mt-2 text-center text-xs text-muted">
-        {isGenreBeat ? (
-          <>
-            Genre shares in the Spotify Top 200
-            {beat >= 3 && (
-              <> {"\u00B7"} <span className="font-semibold" style={{ color: GENRE_COLORS[highlightGenre] }}>{highlightGenre}</span> highlighted</>
-            )}
-          </>
-        ) : (
-          <>Top 10 at peak week {"\u00B7"} Spotify Global Top 200</>
-        )}
-      </p>
     </div>
   );
 }

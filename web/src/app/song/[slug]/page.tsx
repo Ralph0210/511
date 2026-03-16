@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { FEATURED_SONGS } from "@/data/featured-songs";
 import { createSupabaseClient } from "@/lib/supabase";
-import { classifyGenre, GENRE_COLORS, fetchSpotifyLifespanContext, type SpotifyLifespanContext } from "@/lib/spotify-data";
+import { classifyGenre, GENRE_COLORS, fetchSpotifyLifespanContext, fetchLongevityCategoryContext, type SpotifyLifespanContext, type LongevityCategoryContext } from "@/lib/spotify-data";
 import { generateNarrative, analyzeChartRuns, type ChartRunInfo, type PeerSong } from "@/lib/narrative-generator";
 import { fetchBillboardForSong, type BillboardSongData } from "@/lib/billboard-data";
 import SpotifyEmbed from "@/components/SpotifyEmbed";
@@ -21,8 +21,8 @@ export type SongPageData = {
   releaseDate: string | null;
   genre: string;
   trajectory: TrajectoryRow[];
-  songFeatures: { danceability: number; energy: number; valence: number; acousticness: number; speechiness: number; tempo: number };
-  eraAverage: { danceability: number; energy: number; valence: number; acousticness: number; speechiness: number; tempo: number };
+  songFeatures: { danceability: number; energy: number; duration: number; acousticness: number; speechiness: number; tempo: number };
+  eraAverage: { danceability: number; energy: number; duration: number; acousticness: number; speechiness: number; tempo: number };
   genreShares: { period: string; genre: string; share: number }[];
   peakRank: number;
   weeksOnChart: number;
@@ -31,6 +31,7 @@ export type SongPageData = {
   lastWeek: string;
   billboardData?: BillboardSongData | null;
   spotifyLifespan?: SpotifyLifespanContext | null;
+  longevityCategory?: LongevityCategoryContext | null;
   chartRunInfo: ChartRunInfo;
   peerSongs: PeerSong[];
   totalChartStreams: number;
@@ -38,6 +39,7 @@ export type SongPageData = {
 };
 
 const MAX_TEMPO = 220;
+const MAX_DURATION = 420_000; // 7 minutes in ms — normalization ceiling for radar
 
 // ---------- Core fetch: given a track_id, get everything ----------
 
@@ -73,20 +75,20 @@ async function fetchSongDataByTrackId(trackId: string): Promise<SongPageData | n
   const year = firstWeek.slice(0, 4);
   const { data: eraRows } = await supabase
     .from("spotify_top200")
-    .select("danceability, energy, valence, acousticness, speechiness, tempo")
+    .select("danceability, energy, duration, acousticness, speechiness, tempo")
     .eq("pivot", false)
     .gte("week", `${year}-01-01`)
     .lte("week", `${year}-12-31`)
     .limit(5000);
 
-  let eraAverage = { danceability: 0.65, energy: 0.65, valence: 0.45, acousticness: 0.2, speechiness: 0.1, tempo: 0.5 };
+  let eraAverage = { danceability: 0.65, energy: 0.65, duration: 0.5, acousticness: 0.2, speechiness: 0.1, tempo: 0.5 };
   if (eraRows?.length) {
     const avg = (key: string) => {
       const vals = (eraRows as Record<string, number | null>[]).map((r) => r[key]).filter((v): v is number => v != null);
       return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
     };
     eraAverage = {
-      danceability: avg("danceability"), energy: avg("energy"), valence: avg("valence"),
+      danceability: avg("danceability"), energy: avg("energy"), duration: avg("duration") / MAX_DURATION,
       acousticness: avg("acousticness"), speechiness: avg("speechiness"), tempo: avg("tempo") / MAX_TEMPO,
     };
   }
@@ -133,6 +135,12 @@ async function fetchSongDataByTrackId(trackId: string): Promise<SongPageData | n
     genre,
   ).catch(() => null);
 
+  // Fetch longevity category context (viral/lasting/slow_burn/flash across full dataset)
+  const longevityCategory = await fetchLongevityCategoryContext(
+    trajectory.length,
+    peakRank,
+  ).catch(() => null);
+
   // Fetch peer songs at peak week (the competition)
   const peakWeekRow = trajectory.find((t) => t.rank === peakRank);
   const peakWeekDate = peakWeekRow?.week || trajectory[0].week;
@@ -175,7 +183,7 @@ async function fetchSongDataByTrackId(trackId: string): Promise<SongPageData | n
     genre,
     trajectory,
     songFeatures: {
-      danceability: meta.danceability || 0, energy: meta.energy || 0, valence: meta.valence || 0,
+      danceability: meta.danceability || 0, energy: meta.energy || 0, duration: (meta.duration || 210_000) / MAX_DURATION,
       acousticness: meta.acousticness || 0, speechiness: meta.speechiness || 0, tempo: (meta.tempo || 120) / MAX_TEMPO,
     },
     eraAverage,
@@ -187,6 +195,7 @@ async function fetchSongDataByTrackId(trackId: string): Promise<SongPageData | n
     lastWeek: trajectory[trajectory.length - 1].week,
     billboardData,
     spotifyLifespan,
+    longevityCategory,
     chartRunInfo,
     peerSongs,
     totalChartStreams,
@@ -260,7 +269,6 @@ export default async function SongPage({ params }: { params: Promise<{ slug: str
   const albumImg = songData.albumImg || "";
 
   const thesis = "thesis" in narrative ? narrative.thesis : generated.thesis;
-  const classification = "classification" in narrative ? narrative.classification : generated.classification;
 
   return (
     <div>
@@ -268,24 +276,23 @@ export default async function SongPage({ params }: { params: Promise<{ slug: str
       <div className="relative overflow-hidden bg-zinc-900 text-white">
         <div className="absolute inset-0 scale-110 opacity-30 blur-3xl" style={{ backgroundImage: albumImg ? `url(${albumImg})` : undefined, backgroundSize: "cover", backgroundPosition: "center" }} />
         <div className="relative mx-auto max-w-page px-6 py-20">
-          <Link href="/" className="mb-8 inline-flex items-center gap-1 text-sm text-zinc-400 hover:text-white">
+          <Link href="/" className="mb-5 inline-flex items-center gap-1 text-sm text-zinc-400 hover:text-white">
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
             Back to Home
           </Link>
 
-          <div className="flex flex-col items-start gap-8 sm:flex-row sm:items-end">
-            {albumImg && <img src={albumImg} alt={`${trackName} album art`} className="h-48 w-48 rounded-2xl shadow-2xl" />}
-            <div className="flex-1">
+          <div className="flex flex-col gap-8 sm:flex-row sm:items-start">
+            {albumImg && <img src={albumImg} alt={`${trackName} album art`} className="h-48 w-48 flex-shrink-0 rounded-2xl shadow-2xl sm:h-56 sm:w-56" />}
+            <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
                 <p className="text-sm font-medium uppercase tracking-wider text-zinc-400">Song Story</p>
                 {isEditorial && (
                   <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-amber-400">Curated</span>
                 )}
-                <span className="rounded-full border border-accent/30 bg-accent/10 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-accent">{classification.label}</span>
               </div>
               <h1 className="mt-2 text-4xl font-bold">{trackName}</h1>
               <p className="mt-1 text-xl text-zinc-300">{artistName}</p>
-              <p className="mt-3 max-w-xl text-base italic text-zinc-400">{thesis}</p>
+              <p className="mt-3 max-w-xl text-base italic text-zinc-300">{thesis}</p>
               <div className="mt-4 flex flex-wrap gap-3">
                 <span className="rounded-full px-3 py-1 text-xs font-medium" style={{ backgroundColor: GENRE_COLORS[genre] || "#9CA3AF", color: "white" }}>{genre}</span>
                 <span className="rounded-full bg-white/10 px-3 py-1 text-xs">Peak #{songData.peakRank}</span>
@@ -305,7 +312,6 @@ export default async function SongPage({ params }: { params: Promise<{ slug: str
         outro={narrative.outro}
         songData={songData}
         genre={genre}
-        classification={classification}
       />
     </div>
   );

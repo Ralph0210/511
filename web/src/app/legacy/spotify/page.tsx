@@ -1,29 +1,9 @@
 import ChartSpotifyStreams, { StreamsDataPoint } from "@/components/ChartSpotifyStreams";
 import ChartGenreBubble, { BubbleDataPoint } from "@/components/ChartGenreBubble";
 import { createSupabaseClient } from "@/lib/supabase";
+import { classifyGenre } from "@/lib/spotify-data";
 
 export const dynamic = "force-dynamic";
-
-// ---------- Genre classification ----------
-// The dataset has fine-grained genre strings like "dance pop, edm, electropop, pop".
-// We bucket them into broad categories for the bubble chart.
-const GENRE_RULES: [RegExp, string][] = [
-  [/\bhip\s?hop\b|\brap\b|\btrap\b/i,      "Hip Hop/Rap"],
-  [/\blatin\b|\breggaeton\b|\btropical\b/i, "Latin"],
-  [/\br&b\b|\bsoul\b|\brhythm\b/i,          "R&B"],
-  [/\brock\b|\bmetal\b|\bpunk\b|\bindie\b/i, "Rock"],
-  [/\bedm\b|\bhouse\b|\bdance\b|\btechno\b|\btrance\b|\bdubstep\b/i, "EDM/Dance"],
-  [/\bcountry\b/i,                           "Country"],
-  [/\bpop\b/i,                               "Pop"],
-];
-
-function classifyGenre(raw: string | null): string {
-  if (!raw) return "Other";
-  for (const [re, label] of GENRE_RULES) {
-    if (re.test(raw)) return label;
-  }
-  return "Other";
-}
 
 // ---------- Data fetching (paginated, same pattern as billboard page.tsx) ----------
 

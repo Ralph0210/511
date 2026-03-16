@@ -54,7 +54,7 @@ function generateHook(song: SongSummary): string {
   const category = classifySongLongevity(song);
 
   if (category === "viral") return `Peaked at #${peak}, gone in ${weeks} weeks`;
-  if (category === "sustained") return `${weeks} weeks on chart, peaking at #${peak}`;
+  if (category === "lasting") return `${weeks} weeks on chart, peaking at #${peak}`;
   if (category === "slow_burn") return `Climbed slowly to #${peak} over ${weeks} weeks`;
   return `#${peak} peak, ${weeks} weeks on chart`;
 }
@@ -106,60 +106,202 @@ async function fetchAllSongs(): Promise<SongSummary[]> {
 
 // ---------- Homepage: 3 exemplars per viz + preview chart data ----------
 
-export async function fetchHomepageData(): Promise<{ exemplars: VizExemplars; preview: PreviewData }> {
+export type HomepageStats = {
+  longevityStat: string;
+  anatomyStat: string;
+  genreStat: string;
+};
+
+export async function fetchHomepageData(): Promise<{ exemplars: VizExemplars; preview: PreviewData; stats: HomepageStats }> {
+  const supabase = createSupabaseClient();
   const allSongs = await fetchAllSongs();
   const classified = allSongs.map((s) => ({ ...s, category: classifySongLongevity(s) }));
 
   // Global dedup: no song appears in more than one viz section
   const usedIds = new Set<string>();
 
-  // --- Longevity exemplars (1 per category) ---
+  // --- Longevity exemplars: shortest-lived vs longest-lived ---
+  // Pick the most extreme contrast to illustrate lifespan spread
+  const sortedByWeeks = [...allSongs].filter((s) => s.album_img).sort((a, b) => a.weeks_on_chart - b.weeks_on_chart);
+  const medianWeeks = sortedByWeeks[Math.floor(sortedByWeeks.length / 2)]?.weeks_on_chart ?? 8;
+
   const longevity: ExemplarSong[] = [];
-  for (const { cat, label } of [
-    { cat: "viral" as const, label: LONGEVITY_LABELS.viral },
-    { cat: "sustained" as const, label: LONGEVITY_LABELS.sustained },
-    { cat: "slow_burn" as const, label: LONGEVITY_LABELS.slow_burn },
-  ]) {
-    const match = classified.find((s) => s.category === cat && s.album_img && !usedIds.has(s.track_id));
-    if (match) {
-      usedIds.add(match.track_id);
-      longevity.push({ ...toExemplar(match), category: label });
-    }
+  // Shortest: a recognizable song (top 20 peak) that vanished fast
+  const shortMatch = sortedByWeeks.find((s) => s.peak_rank <= 20 && !usedIds.has(s.track_id));
+  if (shortMatch) {
+    usedIds.add(shortMatch.track_id);
+    longevity.push({
+      ...toExemplar(shortMatch, `Only ${shortMatch.weeks_on_chart} weeks on chart — peaked at #${shortMatch.peak_rank}`),
+      category: "Short-lived",
+    });
+  }
+  // Longest: the song with the most weeks
+  const longMatch = [...sortedByWeeks].reverse().find((s) => !usedIds.has(s.track_id));
+  if (longMatch) {
+    usedIds.add(longMatch.track_id);
+    longevity.push({
+      ...toExemplar(longMatch, `${longMatch.weeks_on_chart} weeks on chart — peaked at #${longMatch.peak_rank}`),
+      category: "Long-lasting",
+    });
   }
 
-  // --- Song Anatomy exemplars (pick by distinct criteria, skip already-used) ---
-  const byStreamsDesc = [...allSongs].sort((a, b) => (b.max_streams || 0) - (a.max_streams || 0));
-  const byWeeksAsc = [...allSongs]
-    .filter((s) => s.weeks_on_chart >= 3 && s.peak_rank <= 20)
-    .sort((a, b) => a.weeks_on_chart - b.weeks_on_chart);
-  const byAvgStreams = [...allSongs]
-    .filter((s) => s.peak_rank <= 10 && s.weeks_on_chart >= 8)
-    .sort((a, b) => (b.avg_streams || 0) - (a.avg_streams || 0));
+  // --- Song Anatomy exemplars: best cases from the two biggest audio trends ---
+  // Acoustic wave (+35%) and shrinking hits (-9.4%) are the chart's standout stories
+  const yearOf = (s: SongSummary) => parseInt(s.first_week?.slice(0, 4) || "0");
+  const validYears = allSongs.map(yearOf).filter((yr) => yr >= 2017);
+  const dataMinYear = Math.min(...validYears);
+  const dataMaxYear = Math.max(...validYears);
+
+  // Fetch audio features for top-peaking songs to find best exemplars
+  const anatomyCandidates = allSongs.filter((s) => s.peak_rank <= 20 && s.album_img && !usedIds.has(s.track_id));
+  const anatomyCandidateIds = anatomyCandidates.map((s) => s.track_id);
+
+  type HomeAudioRow = { track_id: string; acousticness: number | null; duration: number | null };
+  const homeAudioMap = new Map<string, HomeAudioRow>();
+  const HOME_CHUNK = 100;
+  for (let i = 0; i < anatomyCandidateIds.length; i += HOME_CHUNK) {
+    const chunk = anatomyCandidateIds.slice(i, i + HOME_CHUNK);
+    const { data: audioData } = await supabase
+      .from("spotify_top200")
+      .select("track_id, acousticness, duration")
+      .in("track_id", chunk)
+      .eq("pivot", false)
+      .limit(5000);
+    if (audioData) {
+      for (const row of audioData as HomeAudioRow[]) {
+        if (!homeAudioMap.has(row.track_id)) homeAudioMap.set(row.track_id, row);
+      }
+    }
+  }
 
   const songAnatomy: ExemplarSong[] = [];
-  const anatomySources = [
-    { list: byStreamsDesc, hookFn: (s: SongSummary) => `${s.weeks_on_chart} weeks, peaking at #${s.peak_rank}` },
-    { list: byWeeksAsc, hookFn: (s: SongSummary) => `Quick burn — ${s.weeks_on_chart} weeks, #${s.peak_rank} peak` },
-    { list: byAvgStreams, hookFn: (s: SongSummary) => `Steady performer — #${s.peak_rank} peak over ${s.weeks_on_chart}w` },
-  ];
-  for (const { list, hookFn } of anatomySources) {
-    const match = list.find((s) => s.album_img && !usedIds.has(s.track_id));
-    if (match) {
-      usedIds.add(match.track_id);
-      songAnatomy.push(toExemplar(match, hookFn(match)));
-    }
+
+  // Best acoustic hit: highest acousticness from 2019+
+  const acousticMatch = anatomyCandidates
+    .filter((s) => {
+      const a = homeAudioMap.get(s.track_id);
+      return a && Number(a.acousticness) >= 0.5 && yearOf(s) >= 2019 && !usedIds.has(s.track_id);
+    })
+    .sort((a, b) => Number(homeAudioMap.get(b.track_id)!.acousticness) - Number(homeAudioMap.get(a.track_id)!.acousticness))[0];
+
+  if (acousticMatch) {
+    usedIds.add(acousticMatch.track_id);
+    const acVal = Number(homeAudioMap.get(acousticMatch.track_id)!.acousticness);
+    const pct = Math.round(acVal * 100);
+    // Compute avg acousticness across candidates for context
+    const homeAcVals = anatomyCandidates
+      .map((s) => Number(homeAudioMap.get(s.track_id)?.acousticness ?? 0))
+      .filter((v) => v > 0);
+    const homeAvgAc = homeAcVals.length ? homeAcVals.reduce((a, b) => a + b, 0) / homeAcVals.length : 0.25;
+    const xAbove = homeAvgAc > 0 ? acVal / homeAvgAc : 0;
+    songAnatomy.push(toExemplar(acousticMatch, `${pct}% acoustic — ${xAbove.toFixed(1)}x above average`));
   }
 
-  // --- Genre Pulse exemplars (1 per genre, skip already-used) ---
-  const genresWanted = ["Hip Hop/Rap", "Latin", "Pop"];
+  // Best short hit: shortest duration from top 20 peaks
+  const shortDurMatch = anatomyCandidates
+    .filter((s) => {
+      const a = homeAudioMap.get(s.track_id);
+      return a && Number(a.duration) > 0 && Number(a.duration) < 180_000 && !usedIds.has(s.track_id);
+    })
+    .sort((a, b) => Number(homeAudioMap.get(a.track_id)!.duration) - Number(homeAudioMap.get(b.track_id)!.duration))[0];
+
+  if (shortDurMatch) {
+    usedIds.add(shortDurMatch.track_id);
+    const dur = Number(homeAudioMap.get(shortDurMatch.track_id)!.duration);
+    const mins = Math.floor(dur / 60000);
+    const secs = Math.floor((dur % 60000) / 1000);
+    songAnatomy.push(toExemplar(shortDurMatch, `${mins}:${secs.toString().padStart(2, "0")} long — peaked at #${shortDurMatch.peak_rank}`));
+  }
+
+  // Genre shares by year (needed for exemplars + stat + preview)
+  const genreYearCounts: Record<number, Record<string, number>> = {};
+  for (const s of allSongs) {
+    const yr = parseInt(s.first_week?.slice(0, 4) || "0");
+    if (yr < 2017 || yr > 2021) continue;
+    if (!genreYearCounts[yr]) genreYearCounts[yr] = {};
+    const genre = classifyGenre(s.artist_genres);
+    genreYearCounts[yr][genre] = (genreYearCounts[yr][genre] || 0) + 1;
+  }
+
+  const genreShares = Object.entries(genreYearCounts)
+    .sort(([a], [b]) => Number(a) - Number(b))
+    .map(([year, counts]) => {
+      const total = Object.values(counts).reduce((a, b) => a + b, 0);
+      const shares: Record<string, number> = {};
+      for (const [genre, count] of Object.entries(counts)) {
+        shares[genre] = total > 0 ? (count / total) * 100 : 0;
+      }
+      return { year: Number(year), shares };
+    });
+
+  // --- Genre Pulse exemplars: biggest riser + biggest faller ---
+  // Pick representative songs from genres that shifted most in rank over time
   const genrePulse: ExemplarSong[] = [];
-  for (const targetGenre of genresWanted) {
-    const match = allSongs.find(
-      (s) => s.album_img && classifyGenre(s.artist_genres) === targetGenre && !usedIds.has(s.track_id)
-    );
-    if (match) {
-      usedIds.add(match.track_id);
-      genrePulse.push({ ...toExemplar(match, `Top ${targetGenre} hit — ${generateHook(match)}`), category: targetGenre });
+
+  if (genreShares.length >= 2) {
+    const firstYearShares = genreShares[0];
+    const lastYearShares = genreShares[genreShares.length - 1];
+
+    const rankByShare = (shares: Record<string, number>) =>
+      Object.entries(shares).sort((a, b) => b[1] - a[1]).map(([g]) => g);
+
+    const earlyRanks = rankByShare(firstYearShares.shares);
+    const lateRanks = rankByShare(lastYearShares.shares);
+
+    // Compute rank change for each genre
+    const shifts: { genre: string; change: number; latePct: number }[] = [];
+    for (const genre of lateRanks) {
+      const oldIdx = earlyRanks.indexOf(genre);
+      if (oldIdx === -1) continue;
+      const newIdx = lateRanks.indexOf(genre);
+      shifts.push({
+        genre,
+        change: oldIdx - newIdx, // positive = rose, negative = fell
+        latePct: Math.round(lastYearShares.shares[genre] || 0),
+      });
+    }
+    shifts.sort((a, b) => b.change - a.change);
+
+    const riser = shifts[0];
+    const faller = shifts[shifts.length - 1];
+
+    const picks: { genre: string; hook: string }[] = [];
+    if (riser && riser.change > 0) {
+      picks.push({
+        genre: riser.genre,
+        hook: `${riser.genre} rose to #${lateRanks.indexOf(riser.genre) + 1} by ${lastYearShares.year} — biggest riser`,
+      });
+    }
+    if (faller && faller.change < 0 && faller.genre !== riser?.genre) {
+      picks.push({
+        genre: faller.genre,
+        hook: `${faller.genre} fell to #${lateRanks.indexOf(faller.genre) + 1} by ${lastYearShares.year} — biggest decline`,
+      });
+    }
+
+    // Fallback: if no clear riser/faller, just use #1 and #2
+    if (picks.length === 0) {
+      picks.push(
+        { genre: lateRanks[0], hook: `${lateRanks[0]} — #1 genre with ${Math.round(lastYearShares.shares[lateRanks[0]] || 0)}% chart share` },
+        { genre: lateRanks[1], hook: `${lateRanks[1]} — #2 genre with ${Math.round(lastYearShares.shares[lateRanks[1]] || 0)}% chart share` },
+      );
+    } else if (picks.length === 1) {
+      // Add #1 if not already picked
+      const alt = lateRanks.find((g) => g !== picks[0].genre)!;
+      picks.push({ genre: alt, hook: `${alt} — ${Math.round(lastYearShares.shares[alt] || 0)}% chart share in ${lastYearShares.year}` });
+    }
+
+    for (const pick of picks) {
+      const match = allSongs.find(
+        (s) => s.album_img && classifyGenre(s.artist_genres) === pick.genre && !usedIds.has(s.track_id)
+      );
+      if (match) {
+        usedIds.add(match.track_id);
+        genrePulse.push({
+          ...toExemplar(match, pick.hook),
+          category: pick.genre,
+        });
+      }
     }
   }
 
@@ -167,8 +309,8 @@ export async function fetchHomepageData(): Promise<{ exemplars: VizExemplars; pr
 
   // Longevity scatter: sample ~250 songs across categories
   const scatter: ScatterPoint[] = [];
-  const catCounts: Record<string, number> = { viral: 0, sustained: 0, slow_burn: 0, other: 0 };
-  const catLimits: Record<string, number> = { viral: 60, sustained: 80, slow_burn: 60, other: 50 };
+  const catCounts: Record<string, number> = { flash_hit: 0, anthem: 0, steady_grower: 0, fleeting: 0 };
+  const catLimits: Record<string, number> = { flash_hit: 60, anthem: 80, steady_grower: 60, fleeting: 50 };
   for (const s of classified) {
     if (catCounts[s.category] < catLimits[s.category]) {
       scatter.push({
@@ -192,26 +334,51 @@ export async function fetchHomepageData(): Promise<{ exemplars: VizExemplars; pr
     // We don't have per-song audio features in song_summary, so we'll skip this and use weekly_attribute_trends
   }
 
-  // Genre shares by year
-  const genreYearCounts: Record<number, Record<string, number>> = {};
-  for (const s of allSongs) {
-    const yr = parseInt(s.first_week?.slice(0, 4) || "0");
-    if (yr < 2017 || yr > 2021) continue;
-    if (!genreYearCounts[yr]) genreYearCounts[yr] = {};
-    const genre = classifyGenre(s.artist_genres);
-    genreYearCounts[yr][genre] = (genreYearCounts[yr][genre] || 0) + 1;
-  }
+  // --- Compute real stats from the dataset ---
 
-  const genreShares = Object.entries(genreYearCounts)
-    .sort(([a], [b]) => Number(a) - Number(b))
-    .map(([year, counts]) => {
-      const total = Object.values(counts).reduce((a, b) => a + b, 0);
-      const shares: Record<string, number> = {};
-      for (const [genre, count] of Object.entries(counts)) {
-        shares[genre] = total > 0 ? (count / total) * 100 : 0;
+  // Longevity: median weeks and the spread
+  const longevityStat = `Median chart life is ${medianWeeks} weeks — but some last ${sortedByWeeks[sortedByWeeks.length - 1]?.weeks_on_chart ?? "?"}`;
+
+  // Anatomy: dataset year range (already computed above)
+  const anatomyStat = `How hit songs evolved from ${dataMinYear} to ${dataMaxYear}`;
+
+  // Genre: compute ranking shift across years for a compelling subtitle
+  let genreStat = "Genre distribution across the chart";
+  if (genreShares.length >= 2) {
+    const firstYear = genreShares[0];
+    const lastYear = genreShares[genreShares.length - 1];
+
+    // Rank genres by share in first and last year
+    const rankGenres = (shares: Record<string, number>) =>
+      Object.entries(shares).sort((a, b) => b[1] - a[1]).map(([g]) => g);
+
+    const firstRanks = rankGenres(firstYear.shares);
+    const lastRanks = rankGenres(lastYear.shares);
+
+    // Find the biggest riser (improved rank the most)
+    let bestRiser = "";
+    let bestImprovement = 0;
+    for (const genre of lastRanks) {
+      const oldIdx = firstRanks.indexOf(genre);
+      const newIdx = lastRanks.indexOf(genre);
+      if (oldIdx === -1) continue;
+      const improvement = oldIdx - newIdx; // positive = rose in rank
+      if (improvement > bestImprovement) {
+        bestImprovement = improvement;
+        bestRiser = genre;
       }
-      return { year: Number(year), shares };
-    });
+    }
+
+    if (firstRanks[0] !== lastRanks[0]) {
+      genreStat = `${lastRanks[0]} overtook ${firstRanks[0]} as the #1 genre from ${firstYear.year} to ${lastYear.year}`;
+    } else if (bestRiser && bestImprovement > 0) {
+      const lastPct = Math.round(lastYear.shares[bestRiser] || 0);
+      genreStat = `${bestRiser} rose to ${lastPct}% chart share by ${lastYear.year} — the biggest mover across ${genreShares.length} years`;
+    } else {
+      const topPct = Math.round(lastYear.shares[lastRanks[0]] || 0);
+      genreStat = `${lastRanks[0]} dominated with ${topPct}% chart share across ${firstYear.year}–${lastYear.year}`;
+    }
+  }
 
   return {
     exemplars: { longevity, songAnatomy, genrePulse },
@@ -220,6 +387,7 @@ export async function fetchHomepageData(): Promise<{ exemplars: VizExemplars; pr
       attributeTrend: [], // will be fetched from weekly_attribute_trends separately
       genreShares,
     },
+    stats: { longevityStat, anatomyStat, genreStat },
   };
 }
 
@@ -230,46 +398,148 @@ export async function fetchLongevityExemplars(): Promise<CategorizedExemplars[]>
   const classified = allSongs.map((s) => ({ ...s, category: classifySongLongevity(s) }));
   const usedIds = new Set<string>();
 
-  const categories: { key: LongevityCategory; label: string; filter: (s: typeof classified[0]) => boolean }[] = [
-    { key: "viral", label: "Viral Spikes", filter: (s) => s.category === "viral" },
-    { key: "sustained", label: "Sustained Classics", filter: (s) => s.category === "sustained" },
-    { key: "slow_burn", label: "Slow Burners", filter: (s) => s.category === "slow_burn" },
-  ];
+  // Viral: highest peak with fewest weeks — the most extreme flash-in-the-pan hits
+  const viralSongs = classified
+    .filter((s) => s.category === "viral")
+    .sort((a, b) => a.peak_rank - b.peak_rank || a.weeks_on_chart - b.weeks_on_chart);
 
-  return categories.map(({ label, filter }) => ({
-    label,
-    songs: pickUnique(
-      classified.filter(filter),
-      3,
-      usedIds,
-      (s) => generateHook(s)
-    ),
-  }));
+  // Lasting: longest chart life among high-peaking songs — the true endurance champions
+  const lastingSongs = classified
+    .filter((s) => s.category === "lasting")
+    .sort((a, b) => b.weeks_on_chart - a.weeks_on_chart || a.peak_rank - b.peak_rank);
+
+  // Slow Burn: most weeks on chart among moderate-peak songs — patience rewarded
+  const slowBurnSongs = classified
+    .filter((s) => s.category === "slow_burn")
+    .sort((a, b) => b.weeks_on_chart - a.weeks_on_chart);
+
+  return [
+    {
+      label: "Viral",
+      songs: pickUnique(viralSongs, 3, usedIds, (s) =>
+        `Peaked at #${s.peak_rank} but gone in just ${s.weeks_on_chart} week${s.weeks_on_chart === 1 ? "" : "s"}`
+      ),
+    },
+    {
+      label: "Lasting",
+      songs: pickUnique(lastingSongs, 3, usedIds, (s) =>
+        `#${s.peak_rank} peak and ${s.weeks_on_chart} weeks on chart — built to last`
+      ),
+    },
+    {
+      label: "Slow Burns",
+      songs: pickUnique(slowBurnSongs, 3, usedIds, (s) =>
+        `${s.weeks_on_chart} weeks on chart despite only reaching #${s.peak_rank}`
+      ),
+    },
+  ];
 }
 
 export async function fetchAnatomyExemplars(): Promise<CategorizedExemplars[]> {
+  const supabase = createSupabaseClient();
   const allSongs = await fetchAllSongs();
   const usedIds = new Set<string>();
 
-  // Most weeks on chart (long-running)
-  const byWeeks = [...allSongs].sort((a, b) => b.weeks_on_chart - a.weeks_on_chart);
-  const longRunning = pickUnique(byWeeks, 3, usedIds, (s) => `${s.weeks_on_chart} weeks on chart`);
+  // Fetch audio features for recognizable songs (top 50 peak) to find exemplars
+  const candidates = allSongs.filter((s) => s.peak_rank <= 50 && s.album_img);
+  const candidateIds = candidates.map((s) => s.track_id);
 
-  // Highest peak (top of chart)
-  const byPeak = [...allSongs].sort((a, b) => a.peak_rank - b.peak_rank || (b.max_streams || 0) - (a.max_streams || 0));
-  const chartToppers = pickUnique(byPeak, 3, usedIds, (s) => `Peaked at #${s.peak_rank}`);
+  type AudioRow = {
+    track_id: string;
+    acousticness: number | null;
+    speechiness: number | null;
+    energy: number | null;
+    duration: number | null;
+  };
 
-  // Highest streams (streaming giants)
-  const byStreams = [...allSongs].sort((a, b) => (b.max_streams || 0) - (a.max_streams || 0));
-  const streamGiants = pickUnique(byStreams, 3, usedIds, (s) => {
-    const ms = s.max_streams || 0;
-    return ms >= 1_000_000 ? `${(ms / 1_000_000).toFixed(1)}M peak weekly streams` : `${(ms / 1_000).toFixed(0)}K peak weekly streams`;
+  const audioMap = new Map<string, AudioRow>();
+  const CHUNK = 100;
+  for (let i = 0; i < candidateIds.length; i += CHUNK) {
+    const chunk = candidateIds.slice(i, i + CHUNK);
+    const { data } = await supabase
+      .from("spotify_top200")
+      .select("track_id, acousticness, speechiness, energy, duration")
+      .in("track_id", chunk)
+      .eq("pivot", false)
+      .limit(5000);
+    if (data) {
+      for (const row of data as AudioRow[]) {
+        if (!audioMap.has(row.track_id)) audioMap.set(row.track_id, row);
+      }
+    }
+  }
+
+  type Enriched = SongSummary & {
+    acousticness: number;
+    speechiness: number;
+    energy: number;
+    duration: number;
+    year: number;
+  };
+
+  const enriched: Enriched[] = candidates
+    .filter((s) => audioMap.has(s.track_id))
+    .map((s) => {
+      const a = audioMap.get(s.track_id)!;
+      return {
+        ...s,
+        acousticness: Number(a.acousticness) || 0,
+        speechiness: Number(a.speechiness) || 0,
+        energy: Number(a.energy) || 0,
+        duration: Number(a.duration) || 0,
+        year: parseInt(s.first_week?.slice(0, 4) || "0"),
+      };
+    })
+    .filter((s) => s.year >= 2017);
+
+  // --- Category 1: The Acoustic Wave ---
+  // Chart shows acousticness rose +35% — find high-acousticness hits from later years
+  const acousticHits = [...enriched]
+    .filter((s) => s.acousticness >= 0.5 && s.year >= 2019)
+    .sort((a, b) => b.acousticness - a.acousticness || a.peak_rank - b.peak_rank);
+
+  // Compute avg acousticness across all enriched songs for context
+  const allAcousticVals = enriched.map((s) => s.acousticness).filter((v) => v > 0);
+  const avgAcousticness = allAcousticVals.length ? allAcousticVals.reduce((a, b) => a + b, 0) / allAcousticVals.length : 0.25;
+
+  const acousticWave = pickUnique(acousticHits, 3, usedIds, (s) => {
+    const e = enriched.find((x) => x.track_id === s.track_id);
+    const pct = e ? Math.round(e.acousticness * 100) : 0;
+    const xAbove = avgAcousticness > 0 ? (e ? e.acousticness / avgAcousticness : 0) : 0;
+    return `${pct}% acoustic — ${xAbove.toFixed(1)}x above average`;
+  });
+
+  // --- Category 2: The Incredible Shrinking Hit ---
+  // Chart shows duration fell -9.4% — find short-duration hits that still charted high
+  const shortHits = [...enriched]
+    .filter((s) => s.duration > 0 && s.duration < 180_000 && s.peak_rank <= 20)
+    .sort((a, b) => a.duration - b.duration || a.peak_rank - b.peak_rank);
+
+  const shrinkingHits = pickUnique(shortHits, 3, usedIds, (s) => {
+    const e = enriched.find((x) => x.track_id === s.track_id);
+    const dur = e ? e.duration : 0;
+    const mins = Math.floor(dur / 60000);
+    const secs = Math.floor((dur % 60000) / 1000);
+    return `${mins}:${secs.toString().padStart(2, "0")} long — peaked at #${s.peak_rank}`;
+  });
+
+  // --- Category 3: Bucking the Trend ---
+  // Speechiness and energy both declined — find recent high-speech/high-energy outliers
+  const outliers = [...enriched]
+    .filter((s) => s.speechiness >= 0.15 && s.energy >= 0.7 && s.year >= 2020)
+    .sort((a, b) => (b.speechiness + b.energy) - (a.speechiness + a.energy) || a.peak_rank - b.peak_rank);
+
+  const buckingTrend = pickUnique(outliers, 3, usedIds, (s) => {
+    const e = enriched.find((x) => x.track_id === s.track_id);
+    const enPct = e ? Math.round(e.energy * 100) : 0;
+    const spPct = e ? Math.round(e.speechiness * 100) : 0;
+    return `${enPct}% energy, ${spPct}% speech — peaked at #${s.peak_rank} in ${e?.year ?? ""}`;
   });
 
   return [
-    { label: "Long-Running Hits", songs: longRunning },
-    { label: "Chart Toppers", songs: chartToppers },
-    { label: "Streaming Giants", songs: streamGiants },
+    { label: "The Acoustic Wave", songs: acousticWave },
+    { label: "The Incredible Shrinking Hit", songs: shrinkingHits },
+    { label: "Bucking the Trend", songs: buckingTrend },
   ];
 }
 
@@ -277,7 +547,7 @@ export async function fetchGenreExemplars(): Promise<CategorizedExemplars[]> {
   const allSongs = await fetchAllSongs();
   const usedIds = new Set<string>();
 
-  const targetGenres = ["Pop", "Hip Hop/Rap", "Latin", "R&B", "EDM/Dance", "Rock"];
+  const targetGenres = ["Pop", "Hip Hop/Rap", "Latin", "R&B", "EDM/Dance", "Rock", "K-Pop", "Afrobeats"];
 
   return targetGenres
     .map((genre) => {
@@ -286,6 +556,96 @@ export async function fetchGenreExemplars(): Promise<CategorizedExemplars[]> {
       return { label: genre, songs };
     })
     .filter((cat) => cat.songs.length > 0);
+}
+
+// ---------- Bubble explorer data ----------
+
+export type BubbleSong = {
+  track_id: string;
+  track_name: string;
+  artist_name: string;
+  album_img: string | null;
+  weeks_on_chart: number;
+  peak_rank: number;
+  max_streams: number;
+  genre: string;
+  longevity: LongevityCategory;
+  // Audio features (optional — loaded separately for "By Sound" lens)
+  danceability?: number;
+  energy?: number;
+  valence?: number;
+  acousticness?: number;
+};
+
+export async function fetchBubbleData(): Promise<BubbleSong[]> {
+  const allSongs = await fetchAllSongs();
+
+  return allSongs.map((s) => ({
+    track_id: s.track_id,
+    track_name: s.track_name,
+    artist_name: s.artist_name,
+    album_img: s.album_img,
+    weeks_on_chart: s.weeks_on_chart,
+    peak_rank: s.peak_rank,
+    max_streams: Number(s.max_streams) || 0,
+    genre: classifyGenre(s.artist_genres),
+    longevity: classifySongLongevity(s),
+  }));
+}
+
+/**
+ * Fetch audio features for bubble songs from spotify_top200.
+ * Audio features are track-level (constant across weeks), so we fetch one row per track.
+ * Merges features into the provided BubbleSong array in-place and returns it.
+ */
+export async function fetchBubbleAudioFeatures(songs: BubbleSong[]): Promise<BubbleSong[]> {
+  const supabase = createSupabaseClient();
+  const trackIds = songs.map((s) => s.track_id);
+
+  type AudioRow = {
+    track_id: string;
+    danceability: number | null;
+    energy: number | null;
+    valence: number | null;
+    acousticness: number | null;
+  };
+
+  // Batch in chunks of 100 track IDs. Each track has many weekly rows,
+  // but audio features are constant — we only need one row per track.
+  // We fetch with a generous limit and deduplicate client-side.
+  const CHUNK = 100;
+  const audioMap = new Map<string, AudioRow>();
+
+  for (let i = 0; i < trackIds.length; i += CHUNK) {
+    const chunk = trackIds.slice(i, i + CHUNK);
+    const { data } = await supabase
+      .from("spotify_top200")
+      .select("track_id, danceability, energy, valence, acousticness")
+      .in("track_id", chunk)
+      .eq("pivot", false)
+      .limit(5000);
+
+    if (data) {
+      for (const row of data as AudioRow[]) {
+        if (!audioMap.has(row.track_id)) {
+          audioMap.set(row.track_id, row);
+        }
+      }
+    }
+  }
+
+  // Merge into songs
+  for (const song of songs) {
+    const audio = audioMap.get(song.track_id);
+    if (audio) {
+      song.danceability = audio.danceability != null ? Number(audio.danceability) : undefined;
+      song.energy = audio.energy != null ? Number(audio.energy) : undefined;
+      song.valence = audio.valence != null ? Number(audio.valence) : undefined;
+      song.acousticness = audio.acousticness != null ? Number(audio.acousticness) : undefined;
+    }
+  }
+
+  return songs;
 }
 
 // ---------- Preview attribute trend (fetched separately from weekly_attribute_trends) ----------

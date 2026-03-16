@@ -2,31 +2,41 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { useHeaderOverlay } from "@/lib/header-overlay-context";
+import SongSearch from "./SongSearch";
 
 const exploreLinks = [
   { href: "/explore/longevity", label: "The Lifespan of a Hit" },
   { href: "/explore/song-anatomy", label: "Anatomy of a Song" },
-  { href: "/explore/genre-pulse", label: "Genre Pulse" },
+  { href: "/explore/genre-pulse", label: "Genre Breakdown" },
 ];
 
 export default function Header() {
   const [exploreOpen, setExploreOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { content: overlayContent } = useHeaderOverlay();
 
   return (
     <header className="sticky top-0 z-50 border-b border-zinc-800 bg-[#121212]/90 backdrop-blur-md">
       <div className="mx-auto flex max-w-page items-center justify-between px-6 py-4">
         {/* Logo */}
         <Link href="/" className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-sm font-bold text-black">
-            CP
-          </div>
-          <span className="text-lg font-semibold tracking-tight text-white">
-            ChartPulse
-          </span>
+          <img src="/icon.svg" alt="ChartPulse" className="h-8 w-8 rounded-lg" />
+          {!overlayContent && (
+            <span className="text-lg font-semibold tracking-tight text-white">
+              511 Team 3
+            </span>
+          )}
         </Link>
 
-        {/* Desktop nav */}
+        {/* Search */}
+        <SongSearch className="mx-4 hidden w-56 md:block lg:w-72" />
+
+        {/* Overlay content replaces nav when active */}
+        {overlayContent ? (
+          <div className="flex flex-1 items-center justify-center">{overlayContent}</div>
+        ) : (
+        /* Desktop nav */
         <nav className="hidden items-center gap-8 md:flex">
           <Link
             href="/"
@@ -82,9 +92,10 @@ export default function Header() {
             Legacy
           </Link>
         </nav>
+        )}
 
         {/* Mobile hamburger */}
-        <button
+        {!overlayContent && <button
           className="md:hidden"
           onClick={() => setMobileOpen(!mobileOpen)}
           aria-label="Toggle menu"
@@ -110,11 +121,11 @@ export default function Header() {
               />
             )}
           </svg>
-        </button>
+        </button>}
       </div>
 
       {/* Mobile menu */}
-      {mobileOpen && (
+      {!overlayContent && mobileOpen && (
         <div className="border-t border-zinc-800 px-6 py-4 md:hidden">
           <nav className="flex flex-col gap-3">
             <Link

@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import ChartStayingPowerScrolly from "@/components/ChartStayingPowerScrolly";
 import {
   MOCK_SPOTIFY_DISTRIBUTION,
+  MOCK_GENRE_DISTRIBUTION,
   MOCK_BILLBOARD_DISTRIBUTION,
 } from "@/stories/mocks/song-deep-dive";
 
@@ -27,6 +28,7 @@ type Story = StoryObj<typeof meta>;
 
 const baseArgs = {
   spotifyDistribution: MOCK_SPOTIFY_DISTRIBUTION,
+  genreDistribution: MOCK_GENRE_DISTRIBUTION,
   songWeeks: 42,
   yearAvg: 8.3,
   genreAvg: 12.1,
@@ -42,7 +44,7 @@ export const Beat1_Histogram: Story = {
   args: { ...baseArgs, beat: 1 },
 };
 
-export const Beat2_GenreAvg: Story = {
+export const Beat2_Categories: Story = {
   args: { ...baseArgs, beat: 2 },
 };
 
@@ -58,6 +60,10 @@ export const Beat3_BillboardComparison: Story = {
 
 export const NoBillboard: Story = {
   args: { ...baseArgs, beat: 3 },
+};
+
+export const Beat4_GenreOverlay: Story = {
+  args: { ...baseArgs, beat: 4 },
 };
 
 export const ShortLivedSong: Story = {
