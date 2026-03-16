@@ -44,5 +44,8 @@ web/.env.local
 # CSV data files
 *.csv
 
+# PDF supporting docs
+*.pdf
+
 *storybook.log
 storybook-static
